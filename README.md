@@ -1,4 +1,4 @@
-# HEXA 🔍
+# HEXA
 ## AI-Powered Research Copilot Built on Exa.ai
 
 **Turn any research question into comprehensive, cited intelligence reports in minutes.**
