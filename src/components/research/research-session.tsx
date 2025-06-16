@@ -44,9 +44,13 @@ export function ResearchSession() {
       }
       
       setCurrentSession(session)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Search error:', err)
-      setError(err.message || 'An error occurred while searching')
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('An error occurred while searching')
+      }
     } finally {
       setLoading(false)
     }

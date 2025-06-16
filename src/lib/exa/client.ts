@@ -1,6 +1,26 @@
 import Exa from 'exa-js'
 import { ExaSearchOptions, ExaResponse, ExaError } from './types'
 
+// Define proper types for Exa API responses
+interface ExaSearchResult {
+  id?: string;
+  title?: string;
+  url: string;
+  publishedDate?: string;
+  author?: string;
+  score?: number;
+  text?: string;
+  highlights?: string[];
+  summary?: string;
+  [key: string]: unknown;
+}
+
+interface ExaApiResponse {
+  results: ExaSearchResult[];
+  autopromptString?: string;
+  requestId?: string;
+}
+
 class ExaClient {
   private client: Exa
   private isInitialized: boolean = false
@@ -31,7 +51,6 @@ class ExaClient {
 
     try {
       const searchOptions = {
-        query: options.query,
         numResults: options.numResults || 10,
         includeDomains: options.includeDomains,
         excludeDomains: options.excludeDomains,
@@ -42,10 +61,11 @@ class ExaClient {
       }
 
       console.log(`🔍 Searching with Exa: "${options.query}"`)
-      const response = await this.client.searchAndContents(searchOptions)
+      // Pass query as first parameter, options as second
+      const response = await this.client.searchAndContents(options.query, searchOptions) as ExaApiResponse
 
       return {
-        results: response.results.map((result: any) => ({
+        results: response.results.map((result: ExaSearchResult) => ({
           id: result.id || Math.random().toString(36),
           title: result.title || 'Untitled',
           url: result.url,
@@ -59,29 +79,30 @@ class ExaClient {
         autopromptString: response.autopromptString,
         requestId: response.requestId
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Exa search error:', error)
       
       const exaError: ExaError = {
-        message: error.message || 'Search failed',
-        status: error.status || 500,
-        code: error.code || 'SEARCH_ERROR'
+        message: error instanceof Error ? error.message : 'Search failed',
+        status: (error as Record<string, unknown>)?.status as number || 500,
+        code: (error as Record<string, unknown>)?.code as string || 'SEARCH_ERROR'
       }
       
       throw exaError
     }
   }
 
-  async getContents(urls: string[]): Promise<any[]> {
+  async getContents(urls: string[]): Promise<ExaSearchResult[]> {
     this.ensureInitialized()
 
     try {
       console.log(`📄 Fetching contents for ${urls.length} URLs`)
-      const response = await this.client.getContents(urls)
+      const response = await this.client.getContents(urls) as { results: ExaSearchResult[] }
       return response.results || []
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Exa get contents error:', error)
-      throw new Error(`Failed to get contents: ${error.message}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to get contents: ${errorMessage}`)
     }
   }
 
@@ -90,10 +111,10 @@ class ExaClient {
 
     try {
       console.log(`🔗 Finding similar content for: ${url}`)
-      const response = await this.client.findSimilarAndContents(url, { numResults })
+      const response = await this.client.findSimilarAndContents(url, { numResults }) as ExaApiResponse
       
       return {
-        results: response.results.map((result: any) => ({
+        results: response.results.map((result: ExaSearchResult) => ({
           id: result.id || Math.random().toString(36),
           title: result.title || 'Untitled',
           url: result.url,
@@ -104,9 +125,10 @@ class ExaClient {
           highlights: result.highlights || []
         }))
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Exa find similar error:', error)
-      throw new Error(`Failed to find similar content: ${error.message}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to find similar content: ${errorMessage}`)
     }
   }
 }
