@@ -57,7 +57,7 @@ export default function LoadingStates({ stage, message }: LoadingStatesProps) {
 
         {/* Progress indicator */}
         <div className="flex justify-center space-x-2 mt-6">
-          {Object.keys(stages).map((stageKey, index) => (
+          {Object.keys(stages).map((stageKey) => (
             <div
               key={stageKey}
               className={`h-2 w-8 rounded-full transition-all duration-300 ${

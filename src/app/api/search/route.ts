@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { searchWithExa } from '@/lib/exa/client';
-import { generateSearchQueries } from '@/lib/openai/client';
+import { generateSearchQueries } from '@/lib/gemini/client';
 
 export async function POST(request: NextRequest) {
   try {
