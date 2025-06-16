@@ -1,200 +1,115 @@
-import Exa from 'exa-js';
+import Exa from 'exa-js'
+import { ExaSearchOptions, ExaResponse, ExaError } from './types'
 
-// Exa client configuration
-const exa = new Exa(process.env.EXA_API_KEY);
-
-export interface ExaSearchOptions {
-  numResults?: number;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  startCrawlDate?: string;
-  endCrawlDate?: string;
-  startPublishedDate?: string;
-  endPublishedDate?: string;
-  useAutoprompt?: boolean;
-  type?: 'neural' | 'keyword';
-  category?: 'company' | 'research paper' | 'news' | 'github' | 'tweet' | 'movie' | 'song' | 'personal site' | 'pdf';
-}
-
-export interface ExaSearchResult {
-  id: string;
-  url: string;
-  title: string;
-  score: number;
-  publishedDate?: string;
-  author?: string;
-  text?: string;
-  highlights?: string[];
-  highlightScores?: number[];
-}
-
-export interface ExaSearchResponse {
-  results: ExaSearchResult[];
-  autopromptString?: string;
-  requestId: string;
-}
-
-export class ExaClient {
-  private client: Exa;
+class ExaClient {
+  private client: Exa
+  private isInitialized: boolean = false
 
   constructor() {
-    if (!process.env.EXA_API_KEY) {
-      throw new Error('EXA_API_KEY environment variable is required');
+    const apiKey = process.env.EXA_API_KEY
+    if (!apiKey) {
+      throw new Error('EXA_API_KEY is required but not found in environment variables')
     }
-    this.client = new Exa(process.env.EXA_API_KEY);
+    
+    try {
+      this.client = new Exa(apiKey)
+      this.isInitialized = true
+    } catch (error) {
+      console.error('Failed to initialize Exa client:', error)
+      throw new Error('Failed to initialize Exa client')
+    }
   }
 
-  /**
-   * Perform a neural search using Exa
-   */
-  async search(
-    query: string,
-    options: ExaSearchOptions = {}
-  ): Promise<ExaSearchResponse> {
+  private ensureInitialized(): void {
+    if (!this.isInitialized) {
+      throw new Error('Exa client is not properly initialized')
+    }
+  }
+
+  async search(options: ExaSearchOptions): Promise<ExaResponse> {
+    this.ensureInitialized()
+
     try {
       const searchOptions = {
+        query: options.query,
         numResults: options.numResults || 10,
         includeDomains: options.includeDomains,
         excludeDomains: options.excludeDomains,
         startCrawlDate: options.startCrawlDate,
         endCrawlDate: options.endCrawlDate,
-        startPublishedDate: options.startPublishedDate,
-        endPublishedDate: options.endPublishedDate,
-        useAutoprompt: options.useAutoprompt ?? true,
-        type: options.type || 'neural',
-        category: options.category,
-      };
+        useAutoprompt: options.useAutoprompt || true,
+        type: options.type || 'neural'
+      }
 
-      const response = await this.client.search(query, searchOptions);
+      console.log(`🔍 Searching with Exa: "${options.query}"`)
+      const response = await this.client.searchAndContents(searchOptions)
+
+      return {
+        results: response.results.map((result: any) => ({
+          id: result.id || Math.random().toString(36),
+          title: result.title || 'Untitled',
+          url: result.url,
+          publishedDate: result.publishedDate,
+          author: result.author,
+          score: result.score,
+          text: result.text,
+          highlights: result.highlights || [],
+          summary: result.summary
+        })),
+        autopromptString: response.autopromptString,
+        requestId: response.requestId
+      }
+    } catch (error: any) {
+      console.error('Exa search error:', error)
+      
+      const exaError: ExaError = {
+        message: error.message || 'Search failed',
+        status: error.status || 500,
+        code: error.code || 'SEARCH_ERROR'
+      }
+      
+      throw exaError
+    }
+  }
+
+  async getContents(urls: string[]): Promise<any[]> {
+    this.ensureInitialized()
+
+    try {
+      console.log(`📄 Fetching contents for ${urls.length} URLs`)
+      const response = await this.client.getContents(urls)
+      return response.results || []
+    } catch (error: any) {
+      console.error('Exa get contents error:', error)
+      throw new Error(`Failed to get contents: ${error.message}`)
+    }
+  }
+
+  async findSimilar(url: string, numResults: number = 5): Promise<ExaResponse> {
+    this.ensureInitialized()
+
+    try {
+      console.log(`🔗 Finding similar content for: ${url}`)
+      const response = await this.client.findSimilarAndContents(url, { numResults })
       
       return {
         results: response.results.map((result: any) => ({
-          id: result.id,
+          id: result.id || Math.random().toString(36),
+          title: result.title || 'Untitled',
           url: result.url,
-          title: result.title,
-          score: result.score,
           publishedDate: result.publishedDate,
           author: result.author,
+          score: result.score,
           text: result.text,
-          highlights: result.highlights,
-          highlightScores: result.highlightScores,
-        })),
-        autopromptString: response.autopromptString,
-        requestId: response.requestId || 'unknown',
-      };
-    } catch (error) {
-      console.error('Exa search error:', error);
-      throw new Error(
-        error instanceof Error 
-          ? `Search failed: ${error.message}`
-          : 'Search failed: Unknown error'
-      );
-    }
-  }
-
-  /**
-   * Find similar content to a given URL
-   */
-  async findSimilar(
-    url: string,
-    numResults: number = 5
-  ): Promise<ExaSearchResponse> {
-    try {
-      const response = await this.client.findSimilar(url, {
-        numResults,
-      });
-
-      return {
-        results: response.results.map((result: any) => ({
-          id: result.id,
-          url: result.url,
-          title: result.title,
-          score: result.score,
-          publishedDate: result.publishedDate,
-          author: result.author,
-        })),
-        requestId: response.requestId || 'unknown',
-      };
-    } catch (error) {
-      console.error('Exa findSimilar error:', error);
-      throw new Error(
-        error instanceof Error
-          ? `Find similar failed: ${error.message}`
-          : 'Find similar failed: Unknown error'
-      );
-    }
-  }
-
-  /**
-   * Get full content from URLs
-   */
-  async getContents(
-    ids: string[],
-    options: { text?: boolean; highlights?: boolean } = {}
-  ): Promise<any> {
-    try {
-      const response = await this.client.getContents(ids, {
-        text: options.text ?? true,
-        highlights: options.highlights ?? false,
-      });
-
-      return response;
-    } catch (error) {
-      console.error('Exa getContents error:', error);
-      throw new Error(
-        error instanceof Error
-          ? `Get contents failed: ${error.message}`
-          : 'Get contents failed: Unknown error'
-      );
-    }
-  }
-
-  /**
-   * Perform multiple searches with different strategies
-   */
-  async multiSearch(queries: string[], options: ExaSearchOptions = {}): Promise<{
-    [key: string]: ExaSearchResponse;
-  }> {
-    try {
-      const searchPromises = queries.map(async (query, index) => {
-        const result = await this.search(query, {
-          ...options,
-          numResults: options.numResults || 5,
-        });
-        return { query, result };
-      });
-
-      const results = await Promise.allSettled(searchPromises);
-      const successResults: { [key: string]: ExaSearchResponse } = {};
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          successResults[result.value.query] = result.value.result;
-        } else {
-          console.error(`Search failed for query "${queries[index]}":`, result.reason);
-        }
-      });
-
-      return successResults;
-    } catch (error) {
-      console.error('Multi-search error:', error);
-      throw new Error('Multi-search failed');
-    }
-  }
-
-  /**
-   * Health check for Exa API
-   */
-  async healthCheck(): Promise<boolean> {
-    try {
-      await this.search('test', { numResults: 1 });
-      return true;
-    } catch (error) {
-      console.error('Exa health check failed:', error);
-      return false;
+          highlights: result.highlights || []
+        }))
+      }
+    } catch (error: any) {
+      console.error('Exa find similar error:', error)
+      throw new Error(`Failed to find similar content: ${error.message}`)
     }
   }
 }
 
 // Export singleton instance
-export const exaClient = new ExaClient();
+export const exaClient = new ExaClient()
