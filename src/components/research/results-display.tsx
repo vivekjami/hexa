@@ -86,12 +86,12 @@ export function ResultsDisplay({ results, query, loading }: ResultsDisplayProps)
                     )}
                   </div>
                 </div>
-                <a href={result.url} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-3 w-3 mr-1" />
+                <Button variant="outline" size="sm">
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  <a href={result.url} target="_blank" rel="noopener noreferrer" className="ml-1">
                     View
-                  </Button>
-                </a>
+                  </a>
+                </Button>
               </div>
             </CardHeader>
             

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 /* filepath: /home/vivek/vivek/hexa/src/app/globals.css */
+
+
 @layer base {
   :root {
     --background: 0 0% 100%;
