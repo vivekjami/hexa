@@ -1,69 +1,50 @@
-import OpenAI from 'openai'
+import OpenAI from 'openai';
 
-class OpenAIClient {
-  private client: OpenAI
-  private isInitialized: boolean = false
-
-  constructor() {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY is required but not found in environment variables')
-    }
-    
-    try {
-      this.client = new OpenAI({ apiKey })
-      this.isInitialized = true
-    } catch (error) {
-      console.error('Failed to initialize OpenAI client:', error)
-      throw new Error('Failed to initialize OpenAI client')
-    }
-  }
-
-  private ensureInitialized(): void {
-    if (!this.isInitialized) {
-      throw new Error('OpenAI client is not properly initialized')
-    }
-  }
-
-  async generateSearchQueries(topic: string): Promise<string[]> {
-    this.ensureInitialized()
-
-    try {
-      const response = await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a research assistant that helps break down complex topics into targeted search queries. 
-            Generate 3-5 specific, focused search queries that would help comprehensively research the given topic.
-            Each query should target a different angle or aspect of the topic.
-            Return only the queries, one per line, without numbering or formatting.`
-          },
-          {
-            role: 'user',
-            content: `Generate targeted search queries for researching: ${topic}`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 300
-      })
-
-      const content = response.choices[0]?.message?.content || ''
-      return content
-        .split('\n')
-        .map(query => query.trim())
-        .filter(query => query.length > 0)
-        .slice(0, 5)
-    } catch (error: unknown) {
-      console.error('OpenAI query generation error:', error)
-      if (error instanceof Error) {
-        throw new Error(`Failed to generate search queries: ${error.message}`)
-      } else {
-        throw new Error('Failed to generate search queries: Unknown error')
-      }
-    }
-  }
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('OPENAI_API_KEY is required');
 }
 
-// Export singleton instance
-export const openaiClient = new OpenAIClient()
+export const openaiClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function generateSearchQueries(topic: string) {
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content: "You are a research expert. Break down complex topics into 3-5 specific, targeted search queries that will find diverse, high-quality sources."
+        },
+        {
+          role: "user",
+          content: `Generate targeted search queries for researching: "${topic}"`
+        }
+      ],
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('No response from OpenAI');
+
+    // Parse the response into an array of queries
+    const queries = content.split('\n')
+      .filter(line => line.trim())
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(query => query.length > 0);
+
+    return {
+      success: true,
+      queries,
+      error: null
+    };
+  } catch (error) {
+    console.error('OpenAI query generation error:', error);
+    return {
+      success: false,
+      queries: [],
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
