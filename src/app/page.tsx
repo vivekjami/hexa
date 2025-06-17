@@ -6,6 +6,16 @@ import ResultsDisplay from '@/components/research/ResultsDisplay';
 import LoadingStates from '@/components/research/LoadingStates';
 import ResearchReport from '@/components/research/ResearchReport';
 import DiscoveryDisplay from '@/components/research/DiscoveryDisplay';
+import FactVerificationDisplay from '@/components/research/FactVerificationDisplay';
+import CitationManager from '@/components/research/CitationManager';
+import KnowledgeVisualization from '@/components/research/KnowledgeVisualization';
+import { 
+  Search, 
+  FileText, 
+  Network,
+  CheckSquare,
+  BookOpen
+} from 'lucide-react';
 
 // Day 3: Enhanced interfaces for discovery functionality
 interface SourceQuality {
@@ -177,7 +187,116 @@ interface ResearchResponse {
   error?: string;
 }
 
-type ViewMode = 'search' | 'research';
+// Day 4: Interfaces for new features
+interface VerificationResponse {
+  success: boolean;
+  data?: {
+    totalClaims: number;
+    verifiedClaims: Array<{
+      claim: string;
+      sources: Array<{
+        url: string;
+        title: string;
+        agreement: 'agree' | 'disagree' | 'partial' | 'neutral';
+        confidence: number;
+        evidence: string;
+      }>;
+      reliabilityScore: number;
+      consensus: 'strong_agreement' | 'weak_agreement' | 'conflicted' | 'insufficient_data';
+      contradictions: string[];
+    }>;
+    contradictions: Array<{
+      claim: string;
+      sources: Array<{
+        url: string;
+        position: string;
+        confidence: number;
+      }>;
+    }>;
+    overallReliability: number;
+    needsVerification: string[];
+  };
+  error?: string;
+}
+
+interface CitationResponse {
+  success: boolean;
+  data?: {
+    citations: Array<{
+      id: string;
+      url: string;
+      title: string;
+      author?: string;
+      publishedDate?: string;
+      accessedDate: string;
+      sourceType: 'academic' | 'news' | 'government' | 'commercial' | 'blog' | 'social' | 'unknown';
+      facts: Array<{
+        claim: string;
+        pageNumber?: number;
+        quote?: string;
+      }>;
+      credibilityScore: number;
+      format: {
+        apa: string;
+        mla: string;
+        chicago: string;
+        harvard: string;
+      };
+    }>;
+    totalSources: number;
+    highCredibilitySources: number;
+    factsCited: number;
+    duplicatesRemoved: number;
+  };
+  error?: string;
+}
+
+interface KnowledgeGraphResponse {
+  success: boolean;
+  data?: {
+    nodes: Array<{
+      id: string;
+      type: 'source' | 'concept' | 'entity' | 'fact';
+      label: string;
+      data: {
+        url?: string;
+        confidence?: number;
+        category?: string;
+        description?: string;
+        credibilityScore?: number;
+      };
+      size: number;
+      color: string;
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      type: 'cites' | 'relates_to' | 'contradicts' | 'supports' | 'contains';
+      weight: number;
+      label?: string;
+    }>;
+    metadata: {
+      totalNodes: number;
+      totalEdges: number;
+      sourceNodes: number;
+      conceptNodes: number;
+      entityNodes: number;
+      factNodes: number;
+      totalRelationships: number;
+      averageConnectivity: number;
+      clusters: Array<{
+        id: string;
+        label: string;
+        nodes: string[];
+        centroid: { x: number; y: number };
+      }>;
+    };
+  };
+  error?: string;
+}
+
+type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph';
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
@@ -187,6 +306,12 @@ export default function HomePage() {
   const [discoveryResponse, setDiscoveryResponse] = useState<DiscoveryResponse | null>(null);
   const [loadingStage, setLoadingStage] = useState<'analyzing' | 'searching' | 'processing' | 'synthesizing'>('analyzing');
   const [discoveryMode, setDiscoveryMode] = useState<'standard' | 'discovery'>('standard');
+  
+  // Day 4: New state for fact verification, citations, and knowledge graph
+  const [verificationData, setVerificationData] = useState<VerificationResponse | null>(null);
+  const [citationData, setCitationData] = useState<CitationResponse | null>(null);
+  const [knowledgeGraphData, setKnowledgeGraphData] = useState<KnowledgeGraphResponse | null>(null);
+  const [isProcessingDay4, setIsProcessingDay4] = useState(false);
 
   const handleSearch = async (query: string) => {
     setIsLoading(true);
@@ -389,6 +514,98 @@ export default function HomePage() {
     return searchResponse?.data?.originalQuery || '';
   };
 
+  // Day 4: Fact Cross-Verification
+  const handleFactVerification = async () => {
+    if (!discoveryResponse?.data) return;
+
+    setIsProcessingDay4(true);
+    try {
+      const response = await fetch('/api/verification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sources: discoveryResponse.data.sourceAnalysis.map(source => ({
+            url: source.url,
+            title: source.structuredData.summary,
+            text: source.structuredData.keyFacts.map(f => f.claim).join(' '),
+          })),
+          claims: discoveryResponse.data.contentSynthesis.aggregatedFacts.map(f => f.fact)
+        }),
+      });
+
+      const data: VerificationResponse = await response.json();
+      setVerificationData(data);
+      setViewMode('verification');
+    } catch (error) {
+      console.error('Fact verification error:', error);
+    } finally {
+      setIsProcessingDay4(false);
+    }
+  };
+
+  // Day 4: Citation Management
+  const handleCitationGeneration = async () => {
+    if (!discoveryResponse?.data) return;
+
+    setIsProcessingDay4(true);
+    try {
+      const response = await fetch('/api/citations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sources: discoveryResponse.data.sourceAnalysis.map(source => ({
+            url: source.url,
+            title: source.structuredData.summary,
+            author: null,
+            publishedDate: null,
+            sourceType: source.quality.sourceType,
+            facts: source.structuredData.keyFacts,
+            credibilityScore: source.quality.credibilityScore
+          }))
+        }),
+      });
+
+      const data: CitationResponse = await response.json();
+      setCitationData(data);
+      setViewMode('citations');
+    } catch (error) {
+      console.error('Citation generation error:', error);
+    } finally {
+      setIsProcessingDay4(false);
+    }
+  };
+
+  // Day 4: Knowledge Graph Creation
+  const handleKnowledgeGraphGeneration = async () => {
+    if (!discoveryResponse?.data) return;
+
+    setIsProcessingDay4(true);
+    try {
+      const response = await fetch('/api/knowledge-graph', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sources: discoveryResponse.data.sourceAnalysis,
+          verificationData: verificationData?.data
+        }),
+      });
+
+      const data: KnowledgeGraphResponse = await response.json();
+      setKnowledgeGraphData(data);
+      setViewMode('knowledge_graph');
+    } catch (error) {
+      console.error('Knowledge graph generation error:', error);
+    } finally {
+      setIsProcessingDay4(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -397,11 +614,17 @@ export default function HomePage() {
           <div className="py-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-gray-900">
-                HEXA Research Copilot v3.0
+                HEXA Research Copilot v4.0
               </h1>
               <p className="mt-2 text-gray-600">
-                AI-powered research with multi-source discovery and advanced content analysis
+                AI-powered research with fact cross-verification, citation management, and knowledge visualization
               </p>
+              <div className="mt-2 flex justify-center gap-2 text-sm">
+                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Day 4 Complete</span>
+                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full">Fact Verification</span>
+                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Knowledge Graphs</span>
+                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full">Citation Management</span>
+              </div>
             </div>
             
             {/* Discovery Mode Toggle */}
@@ -433,7 +656,7 @@ export default function HomePage() {
             {/* View Mode Toggle */}
             {(searchResponse?.success || researchResponse || discoveryResponse?.success) && (
               <div className="flex justify-center mt-4">
-                <div className="bg-gray-100 p-1 rounded-lg">
+                <div className="bg-gray-100 p-1 rounded-lg flex flex-wrap gap-1">
                   <button
                     onClick={() => setViewMode('search')}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -442,6 +665,7 @@ export default function HomePage() {
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
+                    <Search className="h-4 w-4 mr-2 inline" />
                     {discoveryMode === 'discovery' ? 'Discovery Results' : 'Search Results'}
                   </button>
                   <button
@@ -453,8 +677,60 @@ export default function HomePage() {
                     }`}
                     disabled={!researchResponse?.success}
                   >
+                    <FileText className="h-4 w-4 mr-2 inline" />
                     Research Report
                   </button>
+                  
+                  {/* Day 4: Advanced Analysis Tabs */}
+                  {discoveryResponse?.success && (
+                    <>
+                      <button
+                        onClick={() => {
+                          if (!verificationData) handleFactVerification();
+                          setViewMode('verification');
+                        }}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                          viewMode === 'verification'
+                            ? 'bg-white text-green-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        disabled={isProcessingDay4}
+                      >
+                        <CheckSquare className="h-4 w-4 mr-2 inline" />
+                        {isProcessingDay4 && viewMode === 'verification' ? 'Processing...' : 'Fact Check'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!citationData) handleCitationGeneration();
+                          setViewMode('citations');
+                        }}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                          viewMode === 'citations'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        disabled={isProcessingDay4}
+                      >
+                        <BookOpen className="h-4 w-4 mr-2 inline" />
+                        {isProcessingDay4 && viewMode === 'citations' ? 'Processing...' : 'Citations'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!knowledgeGraphData) handleKnowledgeGraphGeneration();
+                          setViewMode('knowledge_graph');
+                        }}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                          viewMode === 'knowledge_graph'
+                            ? 'bg-white text-purple-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        disabled={isProcessingDay4}
+                      >
+                        <Network className="h-4 w-4 mr-2 inline" />
+                        {isProcessingDay4 && viewMode === 'knowledge_graph' ? 'Processing...' : 'Knowledge Graph'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -487,6 +763,9 @@ export default function HomePage() {
                     <DiscoveryDisplay 
                       data={discoveryResponse.data} 
                       onGenerateResearch={handleGenerateDiscoveryResearch}
+                      onFactVerification={handleFactVerification}
+                      onCitationGeneration={handleCitationGeneration}
+                      onKnowledgeGraph={handleKnowledgeGraphGeneration}
                     />
                   ) : (
                     <div className="text-center py-12">
@@ -606,24 +885,83 @@ export default function HomePage() {
                   )}
                 </>
               )}
+
+              {/* Day 4: Fact Verification Display */}
+              {viewMode === 'verification' && verificationData && (
+                <>
+                  {verificationData.success && verificationData.data ? (
+                    <FactVerificationDisplay
+                      data={verificationData.data}
+                      onClaimClick={(claim) => console.log('Investigate claim:', claim)}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Fact Verification Error</p>
+                        <p className="text-sm mt-2">{verificationData.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Day 4: Citation Manager */}
+              {viewMode === 'citations' && citationData && (
+                <>
+                  {citationData.success && citationData.data ? (
+                    <CitationManager
+                      data={citationData.data}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Citation Generation Error</p>
+                        <p className="text-sm mt-2">{citationData.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Day 4: Knowledge Graph Visualization */}
+              {viewMode === 'knowledge_graph' && knowledgeGraphData && (
+                <>
+                  {knowledgeGraphData.success && knowledgeGraphData.data ? (
+                    <KnowledgeVisualization
+                      data={knowledgeGraphData.data as any}
+                      width={1200}
+                      height={800}
+                      onNodeClick={(node: any) => console.log('Node clicked:', node)}
+                      onEdgeClick={(edge: any) => console.log('Edge clicked:', edge)}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Knowledge Graph Error</p>
+                        <p className="text-sm mt-2">{knowledgeGraphData.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
 
           {/* Welcome State */}
           {!isLoading && !searchResponse && !researchResponse && !discoveryResponse && (
             <div className="text-center py-12">
-              <div className="max-w-2xl mx-auto">
+              <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Welcome to HEXA Research v3.0
+                  Welcome to HEXA Research v4.0
                 </h2>
                 <p className="text-gray-600 mb-8">
-                  Experience next-generation research with multi-source discovery, 
-                  advanced content analysis, and comprehensive quality assessment. 
-                  Choose between standard search or our new multi-source discovery mode 
-                  for in-depth analysis across diverse, high-quality sources.
+                  Experience next-generation research with multi-source discovery, fact cross-verification, 
+                  citation management, and knowledge visualization. Our Day 4 implementation brings 
+                  professional-grade research capabilities with comprehensive quality assessment and 
+                  interactive knowledge mapping.
                 </p>
                 
-                <div className="grid md:grid-cols-3 gap-6 text-left mb-8">
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-left mb-8">
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
                       🧠 Smart Query Decomposition
@@ -638,28 +976,56 @@ export default function HomePage() {
                       ⚡ Parallel Multi-Source Discovery
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Execute searches simultaneously across neural, keyword, and temporal strategies
+                      Simultaneous searches across diverse sources with quality assessment and content synthesis
                     </p>
                   </div>
                   
-                  <div className="bg-white p-6 rounded-lg border border-gray-200">
-                    <h3 className="font-semibold text-gray-900 mb-2">
-                      📊 Advanced Content Analysis
+                  <div className="p-6 rounded-lg border border-green-200 bg-green-50">
+                    <h3 className="font-semibold text-green-900 mb-2">
+                      ✅ Fact Cross-Verification
                     </h3>
-                    <p className="text-sm text-gray-600">
-                      Source quality assessment, fact extraction, and comprehensive credibility scoring
+                    <p className="text-sm text-green-700">
+                      Automatically verify claims across sources and detect contradictions
+                    </p>
+                  </div>
+                  
+                  <div className="p-6 rounded-lg border border-blue-200 bg-blue-50">
+                    <h3 className="font-semibold text-blue-900 mb-2">
+                      📚 Citation Management
+                    </h3>
+                    <p className="text-sm text-blue-700">
+                      Generate properly formatted citations in APA, MLA, Chicago, and Harvard styles
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg border border-purple-200">
+                <div className="grid md:grid-cols-2 gap-6 text-left">
+                  <div className="p-6 rounded-lg border border-purple-200 bg-purple-50">
+                    <h3 className="font-semibold text-purple-900 mb-2">
+                      🕸️ Knowledge Graph Visualization
+                    </h3>
+                    <p className="text-sm text-purple-700">
+                      Interactive D3.js-powered graphs showing connections between sources, concepts, and entities
+                    </p>
+                  </div>
+                  
+                  <div className="p-6 rounded-lg border border-orange-200 bg-orange-50">
+                    <h3 className="font-semibold text-orange-900 mb-2">
+                      📊 Quality Assessment
+                    </h3>
+                    <p className="text-sm text-orange-700">
+                      Advanced credibility scoring, bias detection, and source reliability analysis
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg border border-purple-200">
                   <h3 className="font-semibold text-purple-900 mb-2">
-                    🚀 New: Multi-Source Discovery Mode
+                    🚀 Ready to Start?
                   </h3>
                   <p className="text-sm text-purple-700">
-                    Switch to Discovery mode above to experience our latest Day 3 features: 
-                    parallel search execution, source quality assessment, structured information 
-                    extraction, and comprehensive content synthesis.
+                    Use Discovery mode for comprehensive multi-source analysis with Day 4 features: 
+                    fact verification, citation management, and interactive knowledge graphs.
                   </p>
                 </div>
               </div>

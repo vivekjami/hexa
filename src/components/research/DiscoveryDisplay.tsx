@@ -83,9 +83,18 @@ interface DiscoveryData {
 interface DiscoveryDisplayProps {
   data: DiscoveryData;
   onGenerateResearch?: () => void;
+  onFactVerification?: () => void;
+  onCitationGeneration?: () => void;
+  onKnowledgeGraph?: () => void;
 }
 
-export default function DiscoveryDisplay({ data, onGenerateResearch }: DiscoveryDisplayProps) {
+export default function DiscoveryDisplay({ 
+  data, 
+  onGenerateResearch,
+  onFactVerification,
+  onCitationGeneration,
+  onKnowledgeGraph
+}: DiscoveryDisplayProps) {
   const getQualityColor = (score: number) => {
     if (score >= 0.8) return 'text-green-600 bg-green-100';
     if (score >= 0.6) return 'text-yellow-600 bg-yellow-100';
@@ -279,6 +288,61 @@ export default function DiscoveryDisplay({ data, onGenerateResearch }: Discovery
           </button>
         </div>
       )}
+
+      {/* Day 4: Advanced Analysis Features */}
+      <Card className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+        <h3 className="text-lg font-semibold mb-4 text-blue-900">🧪 Advanced Analysis Tools</h3>
+        <p className="text-sm text-blue-700 mb-6">
+          Dive deeper into your research with cross-verification, citation management, and knowledge mapping.
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {onFactVerification && (
+            <button
+              onClick={onFactVerification}
+              className="flex flex-col items-center p-4 bg-white rounded-lg border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all group"
+            >
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-green-200 transition-colors">
+                <span className="text-green-600 text-xl">✓</span>
+              </div>
+              <h4 className="font-medium text-gray-900 mb-1">Fact Verification</h4>
+              <p className="text-xs text-gray-600 text-center">
+                Cross-verify claims and detect contradictions across sources
+              </p>
+            </button>
+          )}
+
+          {onCitationGeneration && (
+            <button
+              onClick={onCitationGeneration}
+              className="flex flex-col items-center p-4 bg-white rounded-lg border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all group"
+            >
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
+                <span className="text-blue-600 text-xl">📚</span>
+              </div>
+              <h4 className="font-medium text-gray-900 mb-1">Citation Manager</h4>
+              <p className="text-xs text-gray-600 text-center">
+                Generate properly formatted citations in multiple styles
+              </p>
+            </button>
+          )}
+
+          {onKnowledgeGraph && (
+            <button
+              onClick={onKnowledgeGraph}
+              className="flex flex-col items-center p-4 bg-white rounded-lg border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all group"
+            >
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-purple-200 transition-colors">
+                <span className="text-purple-600 text-xl">🕸️</span>
+              </div>
+              <h4 className="font-medium text-gray-900 mb-1">Knowledge Graph</h4>
+              <p className="text-xs text-gray-600 text-center">
+                Visualize connections between sources and concepts
+              </p>
+            </button>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }
