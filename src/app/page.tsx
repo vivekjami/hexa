@@ -14,6 +14,7 @@ import AdvancedSearchOptions from '@/components/research/AdvancedSearchOptions';
 import SearchHistory from '@/components/research/SearchHistory';
 import ResearchTemplates from '@/components/research/ResearchTemplates';
 import RealTimeProgress from '@/components/research/RealTimeProgress';
+import SettingsView from '@/components/research/SettingsView';
 import { 
   Search, 
   FileText, 
@@ -1345,94 +1346,9 @@ export default function HomePage() {
 
               {/* Day 6: Settings View */}
               {viewMode === 'settings' && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Settings</h2>
-                  
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">WebSocket Connection</h3>
-                      <div className="flex items-center space-x-4">
-                        <div className={`flex items-center space-x-2 ${wsConnection ? 'text-green-600' : 'text-red-600'}`}>
-                          <div className={`w-3 h-3 rounded-full ${wsConnection ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <span className="text-sm font-medium">
-                            {wsConnection ? 'Connected' : 'Disconnected'}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (wsConnection) {
-                              wsConnection.close();
-                            } else {
-                              // Reconnect logic would go here
-                              window.location.reload();
-                            }
-                          }}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                        >
-                          {wsConnection ? 'Disconnect' : 'Reconnect'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">Data Management</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Search History ({searchHistory.length} items)</span>
-                          <button
-                            onClick={() => {
-                              setSearchHistory([]);
-                              localStorage.removeItem('hexa-search-history');
-                            }}
-                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Research Sessions ({researchSessions.length} items)</span>
-                          <button
-                            onClick={() => {
-                              setResearchSessions([]);
-                              localStorage.removeItem('hexa-research-sessions');
-                            }}
-                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Custom Templates ({researchTemplates.filter(t => !['academic-research', 'market-analysis', 'news-investigation'].includes(t.id)).length} items)</span>
-                          <button
-                            onClick={() => {
-                              setResearchTemplates(getDefaultTemplates());
-                              localStorage.removeItem('hexa-research-templates');
-                            }}
-                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-                          >
-                            Reset to Defaults
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">Real-time Updates</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Update History ({realTimeUpdates.length} items)</span>
-                          <button
-                            onClick={() => setRealTimeUpdates([])}
-                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-                          >
-                            Clear History
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <SettingsView />
               )}
+
               {/* Discovery Mode Results */}
               {discoveryMode === 'discovery' && viewMode === 'search' && discoveryResponse && (
                 <>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { X, Activity, CheckCircle, AlertCircle, Clock, Wifi, WifiOff } from 'lucide-react';
+import styles from './RealTimeProgress.module.css';
 
 interface RealTimeUpdate {
   type: 'progress' | 'status' | 'result' | 'error';
@@ -105,8 +106,8 @@ const RealTimeProgress: React.FC<Props> = ({ updates, onClose, isConnected }) =>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${getStageProgress()}%` }}
+              className={`bg-blue-600 h-2 rounded-full transition-all duration-300 ${styles.overallProgressBar}`}
+              data-progress={getStageProgress()}
             ></div>
           </div>
         </div>
@@ -146,8 +147,8 @@ const RealTimeProgress: React.FC<Props> = ({ updates, onClose, isConnected }) =>
                       <div className="mt-2">
                         <div className="w-full bg-gray-200 rounded-full h-1">
                           <div 
-                            className="bg-blue-500 h-1 rounded-full transition-all duration-300"
-                            style={{ width: `${update.progress}%` }}
+                            className={`bg-blue-500 h-1 rounded-full transition-all duration-300 ${styles.progressBar}`}
+                            data-progress={update.progress}
                           ></div>
                         </div>
                       </div>

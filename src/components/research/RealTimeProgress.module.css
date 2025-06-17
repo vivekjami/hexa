@@ -1,16 +1,8 @@
 /* Progress bar dynamic width styles */
 .progressBar {
-  height: 0.5rem;
-  border-radius: 9999px;
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 300ms;
+  width: calc(attr(data-progress) * 1%);
 }
 
 .overallProgressBar {
-  height: 0.5rem;
-  border-radius: 9999px;
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 300ms;
+  width: calc(attr(data-progress) * 1%);
 }
