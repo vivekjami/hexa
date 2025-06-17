@@ -177,7 +177,7 @@ interface ResearchResponse {
   error?: string;
 }
 
-type ViewMode = 'search' | 'research' | 'discovery';
+type ViewMode = 'search' | 'research';
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
@@ -192,6 +192,7 @@ export default function HomePage() {
     setIsLoading(true);
     setSearchResponse(null);
     setResearchResponse(null);
+    setDiscoveryResponse(null);
     setLoadingStage('analyzing');
 
     try {
@@ -269,14 +270,70 @@ export default function HomePage() {
     }
   };
 
+  const handleGenerateDiscoveryResearch = async () => {
+    if (!discoveryResponse?.success || !discoveryResponse.data) return;
+
+    setIsLoading(true);
+    setLoadingStage('synthesizing');
+
+    try {
+      // Convert discovery data to results format for research generation
+      const discoveryData = discoveryResponse.data;
+      const convertedResults = discoveryData.parallelExecution.aggregatedResults.map((result, idx) => ({
+        title: result.title,
+        url: result.url,
+        text: result.text,
+        score: discoveryData.sourceAnalysis[idx]?.quality.credibilityScore || 0.5,
+        strategy: 'discovery'
+      }));
+
+      const response = await fetch('/api/research', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate',
+          query: discoveryData.originalQuery,
+          results: convertedResults
+        }),
+      });
+
+      const data: ResearchResponse = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Research generation failed');
+      }
+
+      setResearchResponse(data);
+      setViewMode('research');
+    } catch (error) {
+      console.error('Discovery research generation error:', error);
+      setResearchResponse({
+        success: false,
+        error: error instanceof Error ? error.message : 'Research generation failed'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleFollowUpQuestion = (question: string) => {
-    handleSearch(question);
+    if (discoveryMode === 'discovery') {
+      handleDiscoverySearch(question);
+    } else {
+      handleSearch(question);
+    }
     setViewMode('search');
     setResearchResponse(null);
   };
 
   const handleRefineSearch = (refinedQuery: string) => {
-    handleSearch(refinedQuery);
+    if (discoveryMode === 'discovery') {
+      handleDiscoverySearch(refinedQuery);
+    } else {
+      handleSearch(refinedQuery);
+    }
   };
 
   // Day 3: Enhanced discovery search
@@ -311,12 +368,25 @@ export default function HomePage() {
         console.log('✅ Discovery completed:', data.data?.qualityMetrics);
       } else {
         console.error('Discovery failed:', data.error);
+        setDiscoveryResponse(data);
       }
     } catch (error) {
       console.error('Discovery error:', error);
+      setDiscoveryResponse({
+        success: false,
+        error: error instanceof Error ? error.message : 'Discovery failed'
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Get the appropriate query source for research generation
+  const getQueryForResearch = () => {
+    if (discoveryMode === 'discovery' && discoveryResponse?.data) {
+      return discoveryResponse.data.originalQuery;
+    }
+    return searchResponse?.data?.originalQuery || '';
   };
 
   return (
@@ -372,7 +442,7 @@ export default function HomePage() {
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    {discoveryResponse?.success ? 'Discovery Results' : 'Search Results'}
+                    {discoveryMode === 'discovery' ? 'Discovery Results' : 'Search Results'}
                   </button>
                   <button
                     onClick={() => setViewMode('research')}
@@ -407,10 +477,30 @@ export default function HomePage() {
             <LoadingStates stage={loadingStage} />
           )}
 
-          {/* Content based on mode */}
+          {/* Content based on mode and view */}
           {!isLoading && (
             <>
-              {viewMode === 'search' && searchResponse && (
+              {/* Discovery Mode Results */}
+              {discoveryMode === 'discovery' && viewMode === 'search' && discoveryResponse && (
+                <>
+                  {discoveryResponse.success && discoveryResponse.data ? (
+                    <DiscoveryDisplay 
+                      data={discoveryResponse.data} 
+                      onGenerateResearch={handleGenerateDiscoveryResearch}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Discovery Error</p>
+                        <p className="text-sm mt-2">{discoveryResponse.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Standard Search Results */}
+              {discoveryMode === 'standard' && viewMode === 'search' && searchResponse && (
                 <>
                   {searchResponse.success && searchResponse.data ? (
                     <>
@@ -496,12 +586,13 @@ export default function HomePage() {
                 </>
               )}
 
+              {/* Research Report (available for both modes) */}
               {viewMode === 'research' && researchResponse && (
                 <>
                   {researchResponse.success && researchResponse.report ? (
                     <ResearchReport
                       report={researchResponse.report}
-                      originalQuery={searchResponse?.data?.originalQuery || ''}
+                      originalQuery={getQueryForResearch()}
                       followUpQuestions={researchResponse.followUpQuestions}
                       onFollowUpQuestion={handleFollowUpQuestion}
                     />
@@ -510,23 +601,6 @@ export default function HomePage() {
                       <div className="text-red-600">
                         <p className="text-lg font-medium">Research Generation Error</p>
                         <p className="text-sm mt-2">{researchResponse.error}</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {viewMode === 'discovery' && discoveryResponse && (
-                <>
-                  {discoveryResponse.success && discoveryResponse.data ? (
-                    <DiscoveryDisplay
-                      data={discoveryResponse.data}
-                    />
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="text-red-600">
-                        <p className="text-lg font-medium">Discovery Error</p>
-                        <p className="text-sm mt-2">{discoveryResponse.error}</p>
                       </div>
                     </div>
                   )}
@@ -588,8 +662,6 @@ export default function HomePage() {
                     extraction, and comprehensive content synthesis.
                   </p>
                 </div>
-                
-                
               </div>
             </div>
           )}

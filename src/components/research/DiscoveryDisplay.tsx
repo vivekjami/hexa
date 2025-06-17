@@ -82,9 +82,10 @@ interface DiscoveryData {
 
 interface DiscoveryDisplayProps {
   data: DiscoveryData;
+  onGenerateResearch?: () => void;
 }
 
-export default function DiscoveryDisplay({ data }: DiscoveryDisplayProps) {
+export default function DiscoveryDisplay({ data, onGenerateResearch }: DiscoveryDisplayProps) {
   const getQualityColor = (score: number) => {
     if (score >= 0.8) return 'text-green-600 bg-green-100';
     if (score >= 0.6) return 'text-yellow-600 bg-yellow-100';
@@ -266,6 +267,18 @@ export default function DiscoveryDisplay({ data }: DiscoveryDisplayProps) {
           ))}
         </div>
       </Card>
+
+      {/* Generate Research Report Button */}
+      {onGenerateResearch && (
+        <div className="text-center mt-8">
+          <button
+            onClick={onGenerateResearch}
+            className="inline-flex items-center px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+          >
+            Generate Comprehensive Research Report
+          </button>
+        </div>
+      )}
     </div>
   );
 }
