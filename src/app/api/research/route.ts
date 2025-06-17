@@ -1,13 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateResearchReport, generateFollowUpQuestions } from '@/lib/gemini/client';
 
 // In-memory storage for development (replace with database in production)
 const researchSessions = new Map();
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, sessionId, data } = await request.json();
+    const { action, sessionId, data, query, results } = await request.json();
 
     switch (action) {
+      case 'generate':
+        if (!query || !results || !Array.isArray(results)) {
+          return NextResponse.json(
+            { error: 'Query and results are required for research generation' },
+            { status: 400 }
+          );
+        }
+
+        // Generate research report
+        const reportResponse = await generateResearchReport(query, results);
+        
+        if (!reportResponse.success) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: reportResponse.error || 'Failed to generate research report' 
+            },
+            { status: 500 }
+          );
+        }
+
+        // Generate follow-up questions
+        let followUpQuestions: string[] = [];
+        if (reportResponse.report) {
+          const questionsResponse = await generateFollowUpQuestions(query, reportResponse.report);
+          if (questionsResponse.success && questionsResponse.questions) {
+            followUpQuestions = questionsResponse.questions;
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          report: reportResponse.report,
+          followUpQuestions
+        });
+
       case 'create':
         const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const newSession = {
@@ -80,6 +117,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 
 export async function GET() {
   // Return all active sessions (for development)

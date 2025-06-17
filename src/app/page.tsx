@@ -4,26 +4,74 @@ import React, { useState } from 'react';
 import SearchInput from '@/components/research/SearchInput';
 import ResultsDisplay from '@/components/research/ResultsDisplay';
 import LoadingStates from '@/components/research/LoadingStates';
+import ResearchReport from '@/components/research/ResearchReport';
 
 interface SearchResponse {
   success: boolean;
   data?: {
     originalQuery: string;
     generatedQueries: string[];
-    results: { id: string; title: string; description: string; url: string }[];
+    results: { id: string; title: string; description: string; url: string; text?: string }[];
     totalResults: number;
   };
   error?: string;
 }
 
+interface ResearchReport {
+  executive_summary: string;
+  key_findings: string[];
+  detailed_analysis: string;
+  sources_analysis: string;
+  recommendations: string[];
+  credibility_assessment: {
+    high_credibility: Array<{
+      title: string;
+      url: string;
+      text?: string;
+      publishedDate?: string;
+      author?: string;
+      score?: number;
+    }>;
+    medium_credibility: Array<{
+      title: string;
+      url: string;
+      text?: string;
+      publishedDate?: string;
+      author?: string;
+      score?: number;
+    }>;
+    needs_verification: Array<{
+      title: string;
+      url: string;
+      text?: string;
+      publishedDate?: string;
+      author?: string;
+      score?: number;
+    }>;
+  };
+  gaps_and_limitations: string[];
+}
+
+interface ResearchResponse {
+  success: boolean;
+  report?: ResearchReport;
+  followUpQuestions?: string[];
+  error?: string;
+}
+
+type ViewMode = 'search' | 'research';
+
 export default function HomePage() {
+  const [viewMode, setViewMode] = useState<ViewMode>('search');
   const [isLoading, setIsLoading] = useState(false);
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
+  const [researchResponse, setResearchResponse] = useState<ResearchResponse | null>(null);
   const [loadingStage, setLoadingStage] = useState<'analyzing' | 'searching' | 'processing' | 'synthesizing'>('analyzing');
 
   const handleSearch = async (query: string) => {
     setIsLoading(true);
     setSearchResponse(null);
+    setResearchResponse(null);
     setLoadingStage('analyzing');
 
     try {
@@ -57,6 +105,50 @@ export default function HomePage() {
     }
   };
 
+  const handleGenerateResearch = async () => {
+    if (!searchResponse?.success || !searchResponse.data) return;
+
+    setIsLoading(true);
+    setLoadingStage('synthesizing');
+
+    try {
+      const response = await fetch('/api/research', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate',
+          query: searchResponse.data.originalQuery,
+          results: searchResponse.data.results
+        }),
+      });
+
+      const data: ResearchResponse = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Research generation failed');
+      }
+
+      setResearchResponse(data);
+      setViewMode('research');
+    } catch (error) {
+      console.error('Research generation error:', error);
+      setResearchResponse({
+        success: false,
+        error: error instanceof Error ? error.message : 'Research generation failed'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFollowUpQuestion = (question: string) => {
+    handleSearch(question);
+    setViewMode('search');
+    setResearchResponse(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -71,6 +163,35 @@ export default function HomePage() {
                 AI-powered research assistant built on Exa.ai
               </p>
             </div>
+            
+            {/* Mode Toggle */}
+            {(searchResponse?.success || researchResponse) && (
+              <div className="flex justify-center mt-4">
+                <div className="bg-gray-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setViewMode('search')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      viewMode === 'search'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Search Results
+                  </button>
+                  <button
+                    onClick={() => setViewMode('research')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      viewMode === 'research'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    disabled={!researchResponse?.success}
+                  >
+                    Research Report
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -89,28 +210,64 @@ export default function HomePage() {
             <LoadingStates stage={loadingStage} />
           )}
 
-          {/* Results */}
-          {!isLoading && searchResponse && (
+          {/* Content based on mode */}
+          {!isLoading && (
             <>
-              {searchResponse.success && searchResponse.data ? (
-                <ResultsDisplay
-                  results={searchResponse.data.results}
-                  originalQuery={searchResponse.data.originalQuery}
-                  generatedQueries={searchResponse.data.generatedQueries}
-                />
-              ) : (
-                <div className="text-center py-12">
-                  <div className="text-red-600">
-                    <p className="text-lg font-medium">Search Error</p>
-                    <p className="text-sm mt-2">{searchResponse.error}</p>
-                  </div>
-                </div>
+              {viewMode === 'search' && searchResponse && (
+                <>
+                  {searchResponse.success && searchResponse.data ? (
+                    <>
+                      <ResultsDisplay
+                        results={searchResponse.data.results}
+                        originalQuery={searchResponse.data.originalQuery}
+                        generatedQueries={searchResponse.data.generatedQueries}
+                      />
+                      
+                      {/* Generate Research Button */}
+                      <div className="text-center">
+                        <button
+                          onClick={handleGenerateResearch}
+                          className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        >
+                          Generate Research Report
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Search Error</p>
+                        <p className="text-sm mt-2">{searchResponse.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {viewMode === 'research' && researchResponse && (
+                <>
+                  {researchResponse.success && researchResponse.report ? (
+                    <ResearchReport
+                      report={researchResponse.report}
+                      originalQuery={searchResponse?.data?.originalQuery || ''}
+                      followUpQuestions={researchResponse.followUpQuestions}
+                      onFollowUpQuestion={handleFollowUpQuestion}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Research Generation Error</p>
+                        <p className="text-sm mt-2">{researchResponse.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
 
           {/* Welcome State */}
-          {!isLoading && !searchResponse && (
+          {!isLoading && !searchResponse && !researchResponse && (
             <div className="text-center py-12">
               <div className="max-w-2xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
@@ -143,10 +300,10 @@ export default function HomePage() {
                   
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      Cross-Source Verification
+                      Comprehensive Research Reports
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Validate claims across multiple sources automatically
+                      Generate detailed analysis with credibility assessment and recommendations
                     </p>
                   </div>
                 </div>
