@@ -7,6 +7,188 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
+interface QueryStrategy {
+  primary: string[];
+  secondary: string[];
+  exploratory: string[];
+  validation: string[];
+}
+
+interface QueryAnalysis {
+  complexity: 'simple' | 'moderate' | 'complex';
+  domains: string[];
+  timeframe?: string;
+  entityTypes: string[];
+  searchAngles: string[];
+}
+
+// Advanced query decomposition and strategy generation
+export async function generateAdvancedSearchStrategy(topic: string): Promise<{
+  success: boolean;
+  analysis?: QueryAnalysis;
+  strategy?: QueryStrategy;
+  prioritizedQueries?: string[];
+  error?: string;
+}> {
+  try {
+    const analysisPrompt = `Analyze this research topic and provide a comprehensive search strategy:
+
+Topic: "${topic}"
+
+Please provide:
+1. Complexity assessment (simple/moderate/complex)
+2. Key domains to search (academic, news, industry, government, etc.)
+3. Time sensitivity (if relevant)
+4. Entity types involved (companies, people, technologies, etc.)
+5. Different search angles to explore
+
+Format your response as JSON with this structure:
+{
+  "complexity": "simple|moderate|complex",
+  "domains": ["domain1", "domain2"],
+  "timeframe": "timeframe if relevant",
+  "entityTypes": ["type1", "type2"],
+  "searchAngles": ["angle1", "angle2", "angle3"]
+}`;
+
+    const analysisResult = await model.generateContent(analysisPrompt);
+    const analysisText = analysisResult.response.text();
+    
+    let analysis: QueryAnalysis;
+    try {
+      const cleanJson = analysisText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      analysis = JSON.parse(cleanJson);
+    } catch {
+      // Fallback analysis
+      analysis = {
+        complexity: 'moderate',
+        domains: ['general'],
+        entityTypes: ['topic'],
+        searchAngles: ['overview', 'recent developments', 'expert opinions']
+      };
+    }
+
+    // Generate targeted queries based on analysis
+    const strategyPrompt = `Based on this analysis, generate specific search queries:
+
+Topic: "${topic}"
+Complexity: ${analysis.complexity}
+Search Angles: ${analysis.searchAngles.join(', ')}
+
+Generate 12-15 specific search queries organized into categories:
+
+PRIMARY (3-4 queries): Direct, high-impact searches for core information
+SECONDARY (4-5 queries): Supporting information and context
+EXPLORATORY (3-4 queries): Related topics and broader context
+VALIDATION (2-3 queries): Fact-checking and credibility sources
+
+Format as JSON:
+{
+  "primary": ["query1", "query2"],
+  "secondary": ["query3", "query4"],
+  "exploratory": ["query5", "query6"],
+  "validation": ["query7", "query8"]
+}`;
+
+    const strategyResult = await model.generateContent(strategyPrompt);
+    const strategyText = strategyResult.response.text();
+    
+    let strategy: QueryStrategy;
+    try {
+      const cleanJson = strategyText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      strategy = JSON.parse(cleanJson);
+    } catch {
+      // Fallback strategy
+      strategy = {
+        primary: [topic, `${topic} overview`, `${topic} latest`],
+        secondary: [`${topic} analysis`, `${topic} trends`],
+        exploratory: [`${topic} impact`, `${topic} future`],
+        validation: [`${topic} research`, `${topic} expert opinion`]
+      };
+    }
+
+    // Create prioritized list
+    const prioritizedQueries = [
+      ...strategy.primary,
+      ...strategy.secondary.slice(0, 2),
+      ...strategy.exploratory.slice(0, 2),
+      ...strategy.validation.slice(0, 1)
+    ];
+
+    return {
+      success: true,
+      analysis,
+      strategy,
+      prioritizedQueries,
+    };
+
+  } catch (error) {
+    console.error('Advanced query generation error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Query generation failed'
+    };
+  }
+}
+
+// Query refinement based on search results
+export async function refineQueriesBasedOnResults(
+  originalQuery: string,
+  results: SearchResult[],
+  gaps: string[]
+): Promise<{
+  success: boolean;
+  refinedQueries?: string[];
+  focusAreas?: string[];
+  error?: string;
+}> {
+  try {
+    const refinementPrompt = `Based on these search results, suggest refined queries to fill information gaps:
+
+Original Query: "${originalQuery}"
+
+Current Results Summary:
+${results.slice(0, 5).map(r => `- ${r.title}: ${r.text?.slice(0, 100) || 'No content'}...`).join('\n')}
+
+Identified Gaps:
+${gaps.join('\n- ')}
+
+Generate 5-7 refined search queries that would help fill these gaps and provide more comprehensive coverage.
+
+Format as JSON array:
+["refined query 1", "refined query 2", ...]`;
+
+    const result = await model.generateContent(refinementPrompt);
+    const content = result.response.text();
+    
+    let refinedQueries: string[];
+    try {
+      const cleanJson = content.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      refinedQueries = JSON.parse(cleanJson);
+    } catch {
+      refinedQueries = [
+        `${originalQuery} detailed analysis`,
+        `${originalQuery} expert perspectives`,
+        `${originalQuery} case studies`,
+        `${originalQuery} recent developments`
+      ];
+    }
+
+    return {
+      success: true,
+      refinedQueries,
+      focusAreas: gaps,
+    };
+
+  } catch (error) {
+    console.error('Query refinement error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Query refinement failed'
+    };
+  }
+}
+
 export async function generateSearchQueries(topic: string) {
   try {
     const prompt = `You are a search query optimization assistant. Generate 3-5 diverse search queries that would help find comprehensive information about the given topic. Focus on different angles and aspects of the topic.

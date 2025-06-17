@@ -10,9 +10,42 @@ interface SearchResponse {
   success: boolean;
   data?: {
     originalQuery: string;
-    generatedQueries: string[];
-    results: { id: string; title: string; description: string; url: string; text?: string }[];
+    analysis: {
+      complexity: 'simple' | 'moderate' | 'complex';
+      domains: string[];
+      timeframe?: string;
+      entityTypes: string[];
+      searchAngles: string[];
+    };
+    searchStrategy: {
+      primary: string[];
+      secondary: string[];
+      exploratory: string[];
+      validation: string[];
+    };
+    prioritizedQueries: string[];
+    results: Array<{
+      title: string;
+      url: string;
+      text?: string;
+      publishedDate?: string;
+      author?: string;
+      score?: number;
+      searchQuery?: string;
+      strategy?: string;
+      relevanceScore?: number;
+    }>;
+    enrichedContent: unknown[];
+    similarContent: unknown[];
     totalResults: number;
+    searchStrategies: string[];
+    gaps: string[];
+    refinedQueries: string[];
+    metadata: {
+      complexity: string;
+      domains: string[];
+      timestamp: string;
+    };
   };
   error?: string;
 }
@@ -84,7 +117,13 @@ export default function HomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ 
+          query, 
+          mode: 'comprehensive',
+          options: {
+            numResults: 15
+          }
+        }),
       });
 
       const data: SearchResponse = await response.json();
@@ -149,6 +188,10 @@ export default function HomePage() {
     setResearchResponse(null);
   };
 
+  const handleRefineSearch = (refinedQuery: string) => {
+    handleSearch(refinedQuery);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -157,10 +200,10 @@ export default function HomePage() {
           <div className="py-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-gray-900">
-                HEXA Research Copilot
+                HEXA Research Copilot v2.0
               </h1>
               <p className="mt-2 text-gray-600">
-                AI-powered research assistant built on Exa.ai
+                AI-powered research with smart query decomposition and multi-strategy search
               </p>
             </div>
             
@@ -217,10 +260,65 @@ export default function HomePage() {
                 <>
                   {searchResponse.success && searchResponse.data ? (
                     <>
+                      {/* Search Strategy Overview */}
+                      {searchResponse.data.analysis && (
+                        <div className="bg-white rounded-lg border border-gray-200 p-6">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            Search Strategy Analysis
+                          </h3>
+                          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Complexity</span>
+                              <p className="text-lg capitalize">{searchResponse.data.analysis.complexity}</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Search Angles</span>
+                              <p className="text-lg">{searchResponse.data.analysis.searchAngles.length}</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Domains</span>
+                              <p className="text-lg">{searchResponse.data.analysis.domains.length}</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Strategies Used</span>
+                              <p className="text-lg">{searchResponse.data.searchStrategies.length}</p>
+                            </div>
+                          </div>
+                          
+                          {/* Gaps and Refinements */}
+                          {searchResponse.data.gaps.length > 0 && (
+                            <div className="mt-4 p-4 bg-amber-50 rounded-lg">
+                              <h4 className="font-medium text-amber-800 mb-2">Information Gaps Identified</h4>
+                              <ul className="text-sm text-amber-700 space-y-1">
+                                {searchResponse.data.gaps.map((gap, idx) => (
+                                  <li key={idx}>• {gap}</li>
+                                ))}
+                              </ul>
+                              {searchResponse.data.refinedQueries.length > 0 && (
+                                <div className="mt-3">
+                                  <h5 className="font-medium text-amber-800 mb-2">Suggested Refinements</h5>
+                                  <div className="flex flex-wrap gap-2">
+                                    {searchResponse.data.refinedQueries.slice(0, 3).map((query, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => handleRefineSearch(query)}
+                                        className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs hover:bg-amber-200 transition-colors"
+                                      >
+                                        {query}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <ResultsDisplay
                         results={searchResponse.data.results}
                         originalQuery={searchResponse.data.originalQuery}
-                        generatedQueries={searchResponse.data.generatedQueries}
+                        generatedQueries={searchResponse.data.prioritizedQueries || []}
                       />
                       
                       {/* Generate Research Button */}
@@ -229,7 +327,7 @@ export default function HomePage() {
                           onClick={handleGenerateResearch}
                           className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                         >
-                          Generate Research Report
+                          Generate Comprehensive Research Report
                         </button>
                       </div>
                     </>
@@ -271,41 +369,53 @@ export default function HomePage() {
             <div className="text-center py-12">
               <div className="max-w-2xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Welcome to HEXA Research
+                  Welcome to HEXA Research v2.0
                 </h2>
                 <p className="text-gray-600 mb-8">
-                  Transform any research question into comprehensive, cited intelligence reports. 
-                  HEXA uses advanced AI to discover, analyze, and synthesize information from 
-                  across the web.
+                  Experience next-generation research with smart query decomposition, 
+                  multi-strategy search, and AI-powered analysis. Our advanced system 
+                  breaks down complex questions and searches from multiple angles to 
+                  ensure comprehensive coverage.
                 </p>
                 
                 <div className="grid md:grid-cols-3 gap-6 text-left">
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      Smart Query Decomposition
+                      🧠 Smart Query Decomposition
                     </h3>
                     <p className="text-sm text-gray-600">
-                      AI breaks complex topics into targeted search strategies
+                      AI analyzes complexity and generates targeted search strategies with multiple angles
                     </p>
                   </div>
                   
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      Neural Search Discovery
+                      🔍 Multi-Strategy Search
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Find diverse, high-quality sources using Exa&apos;s neural search
+                      Neural, keyword, and temporal search strategies for comprehensive coverage
                     </p>
                   </div>
                   
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      Comprehensive Research Reports
+                      📊 Intelligent Analysis
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Generate detailed analysis with credibility assessment and recommendations
+                      Gap detection, query refinement, and credibility assessment powered by Gemini AI
                     </p>
                   </div>
+                </div>
+                
+                <div className="mt-8 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="font-medium text-blue-800 mb-2">Day 2 Features 🚀</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>✅ Advanced query decomposition with complexity analysis</li>
+                    <li>✅ Multi-strategy search (neural, keyword, temporal)</li>
+                    <li>✅ Content enrichment and similarity discovery</li>
+                    <li>✅ Information gap detection and query refinement</li>
+                    <li>✅ Powered by Google Gemini 2.0 Flash</li>
+                  </ul>
                 </div>
               </div>
             </div>
