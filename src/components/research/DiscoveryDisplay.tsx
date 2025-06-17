@@ -86,6 +86,7 @@ interface DiscoveryDisplayProps {
   onFactVerification?: () => void;
   onCitationGeneration?: () => void;
   onKnowledgeGraph?: () => void;
+  onEnhancedReport?: () => void;
 }
 
 export default function DiscoveryDisplay({ 
@@ -93,7 +94,8 @@ export default function DiscoveryDisplay({
   onGenerateResearch,
   onFactVerification,
   onCitationGeneration,
-  onKnowledgeGraph
+  onKnowledgeGraph,
+  onEnhancedReport
 }: DiscoveryDisplayProps) {
   const getQualityColor = (score: number) => {
     if (score >= 0.8) return 'text-green-600 bg-green-100';
@@ -338,6 +340,21 @@ export default function DiscoveryDisplay({
               <h4 className="font-medium text-gray-900 mb-1">Knowledge Graph</h4>
               <p className="text-xs text-gray-600 text-center">
                 Visualize connections between sources and concepts
+              </p>
+            </button>
+          )}
+
+          {onEnhancedReport && (
+            <button
+              onClick={onEnhancedReport}
+              className="flex flex-col items-center p-4 bg-white rounded-lg border border-orange-200 hover:border-orange-300 hover:shadow-md transition-all group"
+            >
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-orange-200 transition-colors">
+                <span className="text-orange-600 text-xl">📊</span>
+              </div>
+              <h4 className="font-medium text-gray-900 mb-1">Enhanced Report</h4>
+              <p className="text-xs text-gray-600 text-center">
+                Generate publication-ready research reports with synthesis
               </p>
             </button>
           )}

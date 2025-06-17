@@ -9,12 +9,14 @@ import DiscoveryDisplay from '@/components/research/DiscoveryDisplay';
 import FactVerificationDisplay from '@/components/research/FactVerificationDisplay';
 import CitationManager from '@/components/research/CitationManager';
 import KnowledgeVisualization from '@/components/research/KnowledgeVisualization';
+import EnhancedReportComponent from '@/components/research/EnhancedReportComponent';
 import { 
   Search, 
   FileText, 
   Network,
   CheckSquare,
-  BookOpen
+  BookOpen,
+  FileCheck
 } from 'lucide-react';
 
 // Day 3: Enhanced interfaces for discovery functionality
@@ -296,7 +298,76 @@ interface KnowledgeGraphResponse {
   error?: string;
 }
 
-type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph';
+// Day 5: Enhanced report generation interface
+interface EnhancedReportResponse {
+  success: boolean;
+  data?: {
+    report: {
+      title: string;
+      executiveSummary: string;
+      sections: Array<{
+        id: string;
+        title: string;
+        content: string;
+        citations: string[];
+        confidence: number;
+        subsections?: any[];
+      }>;
+      metadata: {
+        generatedAt: string;
+        query: string;
+        sourceCount: number;
+        confidenceScore: number;
+        wordCount: number;
+        estimatedReadingTime: number;
+      };
+    };
+    synthesis: {
+      keyThemes: Array<{
+        theme: string;
+        evidence: Array<{
+          sourceId: string;
+          claim: string;
+          confidence: number;
+        }>;
+        consensus: 'strong' | 'moderate' | 'weak' | 'conflicting';
+      }>;
+      timeline?: Array<{
+        date: string;
+        event: string;
+        sources: string[];
+      }>;
+      statistics: Array<{
+        metric: string;
+        value: string;
+        source: string;
+        confidence: number;
+      }>;
+      controversies: Array<{
+        topic: string;
+        conflictingSources: Array<{
+          sourceId: string;
+          position: string;
+        }>;
+      }>;
+    };
+    bibliography: {
+      style: string;
+      entries: Array<{
+        id: string;
+        formatted: string;
+      }>;
+    };
+    export?: {
+      content: string;
+      fileName: string;
+      mimeType: string;
+    };
+  };
+  error?: string;
+}
+
+type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph' | 'enhanced_report';
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
@@ -312,6 +383,10 @@ export default function HomePage() {
   const [citationData, setCitationData] = useState<CitationResponse | null>(null);
   const [knowledgeGraphData, setKnowledgeGraphData] = useState<KnowledgeGraphResponse | null>(null);
   const [isProcessingDay4, setIsProcessingDay4] = useState(false);
+
+  // Day 5: Enhanced report generation state
+  const [enhancedReportData, setEnhancedReportData] = useState<EnhancedReportResponse | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const handleSearch = async (query: string) => {
     setIsLoading(true);
@@ -606,6 +681,62 @@ export default function HomePage() {
     }
   };
 
+  // Day 5: Enhanced Report Generation
+  const handleEnhancedReportGeneration = async (options?: any) => {
+    if (!discoveryResponse?.data) return;
+
+    setIsGeneratingReport(true);
+    try {
+      const sources = discoveryResponse.data.sourceAnalysis.map(source => ({
+        id: source.url,
+        url: source.url,
+        title: source.structuredData.summary,
+        content: source.structuredData.keyFacts.map(fact => fact.claim).join('. '),
+        author: null,
+        publishedDate: null,
+        credibilityScore: source.quality.credibilityScore,
+        sourceType: source.quality.sourceType,
+        keyFacts: source.structuredData.keyFacts.map(fact => ({
+          claim: fact.claim,
+          confidence: fact.confidence,
+          category: fact.category
+        }))
+      }));
+
+      const response = await fetch('/api/report-generation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: discoveryResponse.data.originalQuery,
+          sources,
+          options: {
+            citationStyle: options?.citationStyle || 'apa',
+            exportFormat: options?.exportFormat,
+            template: options?.template || 'academic',
+            includeMetadata: options?.includeMetadata ?? true,
+            includeBibliography: options?.includeBibliography ?? true,
+            includeTableOfContents: options?.includeTableOfContents ?? true
+          }
+        }),
+      });
+
+      const data: EnhancedReportResponse = await response.json();
+      
+      if (data.success) {
+        setEnhancedReportData(data);
+        setViewMode('enhanced_report');
+      } else {
+        console.error('Enhanced report generation failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Enhanced report generation error:', error);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -614,16 +745,17 @@ export default function HomePage() {
           <div className="py-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-gray-900">
-                HEXA Research Copilot v4.0
+                HEXA Research Copilot v5.0
               </h1>
               <p className="mt-2 text-gray-600">
-                AI-powered research with fact cross-verification, citation management, and knowledge visualization
+                AI-powered research with synthesis, fact verification, citations, and professional report generation
               </p>
               <div className="mt-2 flex justify-center gap-2 text-sm">
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Day 4 Complete</span>
-                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full">Fact Verification</span>
-                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Knowledge Graphs</span>
-                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full">Citation Management</span>
+                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full">Day 5 Complete</span>
+                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Content Synthesis</span>
+                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Report Generation</span>
+                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full">Multiple Export Formats</span>
+                <span className="bg-teal-100 text-teal-800 px-3 py-1 rounded-full">Citation Styles</span>
               </div>
             </div>
             
@@ -729,6 +861,18 @@ export default function HomePage() {
                         <Network className="h-4 w-4 mr-2 inline" />
                         {isProcessingDay4 && viewMode === 'knowledge_graph' ? 'Processing...' : 'Knowledge Graph'}
                       </button>
+                      <button
+                        onClick={() => handleEnhancedReportGeneration()}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                          viewMode === 'enhanced_report'
+                            ? 'bg-white text-orange-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        disabled={isGeneratingReport}
+                      >
+                        <FileCheck className="h-4 w-4 mr-2 inline" />
+                        {isGeneratingReport ? 'Generating...' : 'Enhanced Report'}
+                      </button>
                     </>
                   )}
                 </div>
@@ -766,6 +910,7 @@ export default function HomePage() {
                       onFactVerification={handleFactVerification}
                       onCitationGeneration={handleCitationGeneration}
                       onKnowledgeGraph={handleKnowledgeGraphGeneration}
+                      onEnhancedReport={handleEnhancedReportGeneration}
                     />
                   ) : (
                     <div className="text-center py-12">
@@ -944,6 +1089,27 @@ export default function HomePage() {
                   )}
                 </>
               )}
+
+              {/* Day 5: Enhanced Report Generation */}
+              {viewMode === 'enhanced_report' && enhancedReportData && (
+                <>
+                  {enhancedReportData.success && enhancedReportData.data ? (
+                    <EnhancedReportComponent
+                      data={enhancedReportData.data}
+                      originalQuery={discoveryResponse?.data?.originalQuery || ''}
+                      onRegenerateReport={handleEnhancedReportGeneration}
+                      isLoading={isGeneratingReport}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Enhanced Report Generation Error</p>
+                        <p className="text-sm mt-2">{enhancedReportData.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
 
@@ -952,13 +1118,13 @@ export default function HomePage() {
             <div className="text-center py-12">
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Welcome to HEXA Research v4.0
+                  Welcome to HEXA Research v5.0
                 </h2>
                 <p className="text-gray-600 mb-8">
                   Experience next-generation research with multi-source discovery, fact cross-verification, 
-                  citation management, and knowledge visualization. Our Day 4 implementation brings 
-                  professional-grade research capabilities with comprehensive quality assessment and 
-                  interactive knowledge mapping.
+                  citation management, knowledge visualization, and now professional report generation with 
+                  content synthesis. Our Day 5 implementation brings publication-ready research reports 
+                  with proper citations, multiple export formats, and advanced content analysis.
                 </p>
                 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-left mb-8">
@@ -999,7 +1165,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6 text-left">
+                <div className="grid md:grid-cols-2 gap-6 text-left mb-8">
                   <div className="p-6 rounded-lg border border-purple-200 bg-purple-50">
                     <h3 className="font-semibold text-purple-900 mb-2">
                       🕸️ Knowledge Graph Visualization
@@ -1011,21 +1177,41 @@ export default function HomePage() {
                   
                   <div className="p-6 rounded-lg border border-orange-200 bg-orange-50">
                     <h3 className="font-semibold text-orange-900 mb-2">
-                      📊 Quality Assessment
+                      📊 Enhanced Report Generation
                     </h3>
                     <p className="text-sm text-orange-700">
-                      Advanced credibility scoring, bias detection, and source reliability analysis
+                      Publication-ready reports with content synthesis, multiple export formats, and proper citations
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg border border-purple-200">
-                  <h3 className="font-semibold text-purple-900 mb-2">
-                    🚀 Ready to Start?
+                <div className="grid md:grid-cols-2 gap-6 text-left">
+                  <div className="p-6 rounded-lg border border-teal-200 bg-teal-50">
+                    <h3 className="font-semibold text-teal-900 mb-2">
+                      📝 Content Synthesis Engine
+                    </h3>
+                    <p className="text-sm text-teal-700">
+                      Intelligent combination of multiple sources with narrative generation and proper attribution
+                    </p>
+                  </div>
+                  
+                  <div className="p-6 rounded-lg border border-indigo-200 bg-indigo-50">
+                    <h3 className="font-semibold text-indigo-900 mb-2">
+                      📤 Multiple Export Formats
+                    </h3>
+                    <p className="text-sm text-indigo-700">
+                      Export reports as PDF, Markdown, HTML, or JSON with customizable templates and citation styles
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 bg-gradient-to-r from-orange-50 to-purple-50 p-6 rounded-lg border border-orange-200">
+                  <h3 className="font-semibold text-orange-900 mb-2">
+                    🚀 Day 5 Complete: Professional Report Generation
                   </h3>
-                  <p className="text-sm text-purple-700">
-                    Use Discovery mode for comprehensive multi-source analysis with Day 4 features: 
-                    fact verification, citation management, and interactive knowledge graphs.
+                  <p className="text-sm text-orange-700">
+                    Use Discovery mode and generate enhanced reports with content synthesis, timeline analysis, 
+                    statistical aggregation, controversy detection, and proper citation management in multiple styles.
                   </p>
                 </div>
               </div>
