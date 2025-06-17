@@ -1,6 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { multiStrategySearch, findSimilarWithExtraction, extractAndEnrichContent } from '@/lib/exa/client';
-import { generateAdvancedSearchStrategy, refineQueriesBasedOnResults } from '@/lib/gemini/client';
+import { 
+  multiStrategySearch, 
+  findSimilarWithExtraction, 
+  extractAndEnrichContent,
+  executeParallelSearch,
+  assessSourceQuality,
+  extractStructuredInformation
+} from '@/lib/exa/client';
+import { 
+  generateAdvancedSearchStrategy, 
+  refineQueriesBasedOnResults,
+  processBatchContent
+} from '@/lib/gemini/client';
+
+// Define interfaces for proper typing
+interface SearchResult {
+  url: string;
+  title?: string | null;
+  description?: string | null;
+  text?: string | null;
+  publishedDate?: string | null;
+  author?: string;
+  score?: number;
+  searchQuery?: string;
+  strategy?: string;
+  relevanceScore?: number;
+}
+
+interface EnrichedContent {
+  url: string;
+  title?: string | null;
+  text?: string | null;
+  publishedDate?: string | null;
+  wordCount?: number;
+  readingTime?: number;
+  extractedAt?: string;
+  contentQuality?: string;
+}
+
+interface SourceQualityScore {
+  url: string;
+  quality: {
+    credibilityScore: number;
+    domainAuthority: 'high' | 'medium' | 'low';
+    contentFreshness: 'fresh' | 'recent' | 'dated';
+    sourceType: string;
+    factualityIndicators: string[];
+    biasIndicators: string[];
+  };
+  structuredData: {
+    keyFacts: Array<{
+      claim: string;
+      confidence: number;
+      category: string;
+      entities: string[];
+    }>;
+    mainTopics: string[];
+    namedEntities: { [category: string]: string[] };
+    summary: string;
+    citations: string[];
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,12 +86,29 @@ export async function POST(request: NextRequest) {
     const { analysis, strategy, prioritizedQueries } = strategyGeneration;
 
     let searchResults;
-    let enrichedContent: unknown[] = [];
+    let enrichedContent: EnrichedContent[] = [];
     let similarContent: unknown[] = [];
+    let parallelResults = null;
+    let contentAnalysis = null;
+    let sourceQualityScores: SourceQualityScore[] = [];
 
-    // Execute multi-strategy search
-    if (mode === 'comprehensive' && prioritizedQueries) {
-      searchResults = await multiStrategySearch(prioritizedQueries, options);
+    // Day 3: Execute parallel search for better coverage
+    if (mode === 'comprehensive' && prioritizedQueries && prioritizedQueries.length > 1) {
+      const parallelSearch = await executeParallelSearch(prioritizedQueries, options);
+      if (parallelSearch.success) {
+        parallelResults = parallelSearch.data;
+        searchResults = {
+          success: true,
+          data: {
+            results: parallelSearch.data?.aggregatedResults || [],
+            totalFound: parallelSearch.data?.totalSources || 0,
+            strategies: parallelSearch.data?.results?.map(r => r.strategy) || []
+          }
+        };
+      } else {
+        // Fallback to regular multi-strategy search
+        searchResults = await multiStrategySearch(prioritizedQueries, options);
+      }
     } else {
       // Fallback to simple search
       searchResults = await multiStrategySearch([query], options);
@@ -44,16 +121,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract and enrich content from top results
-    const topUrls = searchResults.data?.results?.slice(0, 5).map(r => r.url) || [];
+    // Day 3: Enhanced content extraction and analysis
+    const topUrls = searchResults.data?.results?.slice(0, 8).map(r => r.url) || [];
     if (topUrls.length > 0) {
       const enrichmentResult = await extractAndEnrichContent(topUrls);
       if (enrichmentResult.success) {
         enrichedContent = enrichmentResult.data || [];
+        
+        // Day 3: Assess source quality for each source
+        sourceQualityScores = enrichedContent.map((content: EnrichedContent) => ({
+          url: content.url,
+          quality: assessSourceQuality(content.url, content.text || '', content.publishedDate),
+          structuredData: extractStructuredInformation(content.text || '', content.url)
+        }));
+
+        // Day 3: Batch content analysis
+        const contentBatch = enrichedContent.slice(0, 5).map((content: EnrichedContent) => ({
+          url: content.url,
+          text: content.text || '',
+          title: content.title || ''
+        }));
+        
+        if (contentBatch.length > 0) {
+          const batchAnalysis = await processBatchContent(contentBatch);
+          if (batchAnalysis.success) {
+            contentAnalysis = batchAnalysis.data;
+          }
+        }
       }
 
       // Find similar content for diversity
-      const similarityResult = await findSimilarWithExtraction(topUrls.slice(0, 2));
+      const similarityResult = await findSimilarWithExtraction(topUrls.slice(0, 3));
       if (similarityResult.success) {
         similarContent = similarityResult.data?.results?.slice(0, 5) || [];
       }
@@ -68,13 +166,13 @@ export async function POST(request: NextRequest) {
     if (gaps.length > 0 && searchResults.data?.results) {
       const refinementResult = await refineQueriesBasedOnResults(
         query, 
-        searchResults.data.results.slice(0, 3).map(r => ({
+        searchResults.data.results.slice(0, 3).map((r: SearchResult) => ({
           title: r.title || '',
           url: r.url,
-          text: r.text,
-          publishedDate: r.publishedDate,
-          author: r.author,
-          score: r.score
+          text: r.text || undefined,
+          publishedDate: r.publishedDate || undefined,
+          author: r.author || undefined,
+          score: r.score || undefined
         })), 
         gaps
       );
@@ -82,6 +180,12 @@ export async function POST(request: NextRequest) {
         refinedQueries = refinementResult.refinedQueries || [];
       }
     }
+
+    // Day 3: Calculate diversity and quality metrics
+    const diversityScore = calculateDiversityScore(searchResults.data?.results || []);
+    const avgQualityScore = sourceQualityScores.length > 0 
+      ? sourceQualityScores.reduce((sum, s) => sum + s.quality.credibilityScore, 0) / sourceQualityScores.length 
+      : 0;
 
     return NextResponse.json({
       success: true,
@@ -97,10 +201,23 @@ export async function POST(request: NextRequest) {
         searchStrategies: searchResults.data?.strategies || [],
         gaps,
         refinedQueries,
+        
+        // Day 3: Enhanced analytics
+        parallelExecution: parallelResults,
+        contentAnalysis,
+        sourceQuality: sourceQualityScores,
+        qualityMetrics: {
+          averageCredibilityScore: avgQualityScore,
+          diversityScore,
+          sourcesProcessed: sourceQualityScores.length,
+          highQualitySources: sourceQualityScores.filter(s => s.quality.credibilityScore > 0.7).length
+        },
+        
         metadata: {
           complexity: analysis?.complexity || 'moderate',
           domains: analysis?.domains || [],
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          processingTime: parallelResults?.executionTime || 0
         }
       }
     });
@@ -148,6 +265,45 @@ function identifyInformationGaps(query: string, resultTitles: string[]): string[
   }
 
   return gaps;
+}
+
+// Day 3: Calculate diversity score for search results
+function calculateDiversityScore(results: SearchResult[]): number {
+  if (!results.length) return 0;
+  
+  const domains = new Set<string>();
+  const contentTypes = new Set<string>();
+  
+  results.forEach(result => {
+    try {
+      const domain = new URL(result.url).hostname;
+      domains.add(domain);
+      
+      // Determine content type based on URL or title
+      const url = result.url.toLowerCase();
+      const title = (result.title || '').toLowerCase();
+      
+      if (url.includes('arxiv') || url.includes('scholar') || title.includes('research')) {
+        contentTypes.add('academic');
+      } else if (url.includes('news') || url.includes('reuters') || url.includes('bbc')) {
+        contentTypes.add('news');
+      } else if (url.includes('gov')) {
+        contentTypes.add('government');
+      } else if (url.includes('blog') || url.includes('medium')) {
+        contentTypes.add('blog');
+      } else {
+        contentTypes.add('general');
+      }
+    } catch {
+      // Skip invalid URLs
+    }
+  });
+  
+  // Calculate diversity based on domain and content type variety
+  const domainDiversity = Math.min(domains.size / Math.min(results.length, 10), 1);
+  const typeDiversity = Math.min(contentTypes.size / 5, 1);
+  
+  return (domainDiversity + typeDiversity) / 2;
 }
 
 export async function GET() {

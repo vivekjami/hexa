@@ -5,6 +5,91 @@ import SearchInput from '@/components/research/SearchInput';
 import ResultsDisplay from '@/components/research/ResultsDisplay';
 import LoadingStates from '@/components/research/LoadingStates';
 import ResearchReport from '@/components/research/ResearchReport';
+import DiscoveryDisplay from '@/components/research/DiscoveryDisplay';
+
+// Day 3: Enhanced interfaces for discovery functionality
+interface SourceQuality {
+  credibilityScore: number;
+  domainAuthority: 'high' | 'medium' | 'low';
+  contentFreshness: 'fresh' | 'recent' | 'dated';
+  sourceType: 'academic' | 'news' | 'government' | 'commercial' | 'blog' | 'social' | 'unknown';
+  factualityIndicators: string[];
+  biasIndicators: string[];
+}
+
+interface DiscoveryResponse {
+  success: boolean;
+  data?: {
+    originalQuery: string;
+    parallelExecution: {
+      results: Array<{
+        query: string;
+        results: Array<{
+          url: string;
+          title: string;
+          text: string;
+        }>;
+        strategy: string;
+        executionTime: number;
+        success: boolean;
+      }>;
+      aggregatedResults: Array<{
+        url: string;
+        title: string;
+        text: string;
+      }>;
+      totalSources: number;
+      executionTime: number;
+    };
+    sourceAnalysis: Array<{
+      url: string;
+      quality: SourceQuality;
+      structuredData: {
+        keyFacts: Array<{
+          claim: string;
+          confidence: number;
+          category: string;
+        }>;
+        mainTopics: string[];
+        namedEntities: { [category: string]: string[] };
+        summary: string;
+        citations: string[];
+      };
+      aiAnalysis?: {
+        keyFacts: Array<{
+          claim: string;
+          confidence: number;
+          category: string;
+        }>;
+        summary: string;
+        credibilityAssessment: string;
+        mainTopics: string[];
+        sentimentAnalysis: 'positive' | 'neutral' | 'negative';
+      };
+    }>;
+    contentSynthesis: {
+      processedSources: number;
+      aggregatedFacts: Array<{
+        fact: string;
+        sources: string[];
+        confidence: number;
+        category: string;
+      }>;
+      topicClusters: string[];
+      diversityScore: number;
+      overallSummary: string;
+    };
+    qualityMetrics: {
+      averageCredibilityScore: number;
+      diversityScore: number;
+      sourcesProcessed: number;
+      highQualitySources: number;
+      domainVariety: number;
+      contentTypeVariety: number;
+    };
+  };
+  error?: string;
+}
 
 interface SearchResponse {
   success: boolean;
@@ -92,14 +177,16 @@ interface ResearchResponse {
   error?: string;
 }
 
-type ViewMode = 'search' | 'research';
+type ViewMode = 'search' | 'research' | 'discovery';
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
   const [isLoading, setIsLoading] = useState(false);
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [researchResponse, setResearchResponse] = useState<ResearchResponse | null>(null);
+  const [discoveryResponse, setDiscoveryResponse] = useState<DiscoveryResponse | null>(null);
   const [loadingStage, setLoadingStage] = useState<'analyzing' | 'searching' | 'processing' | 'synthesizing'>('analyzing');
+  const [discoveryMode, setDiscoveryMode] = useState<'standard' | 'discovery'>('standard');
 
   const handleSearch = async (query: string) => {
     setIsLoading(true);
@@ -192,6 +279,46 @@ export default function HomePage() {
     handleSearch(refinedQuery);
   };
 
+  // Day 3: Enhanced discovery search
+  const handleDiscoverySearch = async (query: string) => {
+    setIsLoading(true);
+    setDiscoveryResponse(null);
+    setSearchResponse(null);
+    setResearchResponse(null);
+    setLoadingStage('analyzing');
+
+    try {
+      setTimeout(() => setLoadingStage('searching'), 500);
+      setTimeout(() => setLoadingStage('processing'), 2000);
+      setTimeout(() => setLoadingStage('synthesizing'), 4000);
+
+      const response = await fetch('/api/discovery', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          query,
+          maxSources: 15,
+          analysisDepth: 'comprehensive'
+        }),
+      });
+
+      const data: DiscoveryResponse = await response.json();
+      
+      if (data.success) {
+        setDiscoveryResponse(data);
+        console.log('✅ Discovery completed:', data.data?.qualityMetrics);
+      } else {
+        console.error('Discovery failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Discovery error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -200,15 +327,41 @@ export default function HomePage() {
           <div className="py-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-gray-900">
-                HEXA Research Copilot v2.0
+                HEXA Research Copilot v3.0
               </h1>
               <p className="mt-2 text-gray-600">
-                AI-powered research with smart query decomposition and multi-strategy search
+                AI-powered research with multi-source discovery and advanced content analysis
               </p>
             </div>
             
-            {/* Mode Toggle */}
-            {(searchResponse?.success || researchResponse) && (
+            {/* Discovery Mode Toggle */}
+            <div className="flex justify-center mt-4">
+              <div className="bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setDiscoveryMode('standard')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    discoveryMode === 'standard'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Standard Search
+                </button>
+                <button
+                  onClick={() => setDiscoveryMode('discovery')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    discoveryMode === 'discovery'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Multi-Source Discovery
+                </button>
+              </div>
+            </div>
+            
+            {/* View Mode Toggle */}
+            {(searchResponse?.success || researchResponse || discoveryResponse?.success) && (
               <div className="flex justify-center mt-4">
                 <div className="bg-gray-100 p-1 rounded-lg">
                   <button
@@ -219,7 +372,7 @@ export default function HomePage() {
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    Search Results
+                    {discoveryResponse?.success ? 'Discovery Results' : 'Search Results'}
                   </button>
                   <button
                     onClick={() => setViewMode('research')}
@@ -244,8 +397,9 @@ export default function HomePage() {
         <div className="space-y-8">
           {/* Search Input */}
           <SearchInput 
-            onSearch={handleSearch}
+            onSearch={discoveryMode === 'discovery' ? handleDiscoverySearch : handleSearch}
             isLoading={isLoading}
+            mode={discoveryMode}
           />
 
           {/* Loading States */}
@@ -361,24 +515,41 @@ export default function HomePage() {
                   )}
                 </>
               )}
+
+              {viewMode === 'discovery' && discoveryResponse && (
+                <>
+                  {discoveryResponse.success && discoveryResponse.data ? (
+                    <DiscoveryDisplay
+                      data={discoveryResponse.data}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-red-600">
+                        <p className="text-lg font-medium">Discovery Error</p>
+                        <p className="text-sm mt-2">{discoveryResponse.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
 
           {/* Welcome State */}
-          {!isLoading && !searchResponse && !researchResponse && (
+          {!isLoading && !searchResponse && !researchResponse && !discoveryResponse && (
             <div className="text-center py-12">
               <div className="max-w-2xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Welcome to HEXA Research v2.0
+                  Welcome to HEXA Research v3.0
                 </h2>
                 <p className="text-gray-600 mb-8">
-                  Experience next-generation research with smart query decomposition, 
-                  multi-strategy search, and AI-powered analysis. Our advanced system 
-                  breaks down complex questions and searches from multiple angles to 
-                  ensure comprehensive coverage.
+                  Experience next-generation research with multi-source discovery, 
+                  advanced content analysis, and comprehensive quality assessment. 
+                  Choose between standard search or our new multi-source discovery mode 
+                  for in-depth analysis across diverse, high-quality sources.
                 </p>
                 
-                <div className="grid md:grid-cols-3 gap-6 text-left">
+                <div className="grid md:grid-cols-3 gap-6 text-left mb-8">
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
                       🧠 Smart Query Decomposition
@@ -390,21 +561,32 @@ export default function HomePage() {
                   
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      🔍 Multi-Strategy Search
+                      ⚡ Parallel Multi-Source Discovery
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Neural, keyword, and temporal search strategies for comprehensive coverage
+                      Execute searches simultaneously across neural, keyword, and temporal strategies
                     </p>
                   </div>
                   
                   <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      📊 Intelligent Analysis
+                      📊 Advanced Content Analysis
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Gap detection, query refinement, and credibility assessment powered by Gemini AI
+                      Source quality assessment, fact extraction, and comprehensive credibility scoring
                     </p>
                   </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg border border-purple-200">
+                  <h3 className="font-semibold text-purple-900 mb-2">
+                    🚀 New: Multi-Source Discovery Mode
+                  </h3>
+                  <p className="text-sm text-purple-700">
+                    Switch to Discovery mode above to experience our latest Day 3 features: 
+                    parallel search execution, source quality assessment, structured information 
+                    extraction, and comprehensive content synthesis.
+                  </p>
                 </div>
                 
                 

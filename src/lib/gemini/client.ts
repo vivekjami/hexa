@@ -382,3 +382,180 @@ Provide as a numbered list, one question per line.`;
     };
   }
 }
+
+// Day 3: Advanced content analysis and fact extraction
+export async function analyzeContentForFacts(content: string, url: string): Promise<{
+  success: boolean;
+  data?: {
+    keyFacts: Array<{
+      claim: string;
+      confidence: number;
+      category: string;
+    }>;
+    summary: string;
+    credibilityAssessment: string;
+    mainTopics: string[];
+    sentimentAnalysis: 'positive' | 'neutral' | 'negative';
+  };
+  error?: string;
+}> {
+  try {
+    if (!content || content.length < 100) {
+      return {
+        success: false,
+        error: 'Content too short for analysis'
+      };
+    }
+
+    const analysisPrompt = `Analyze the following content and extract structured information:
+
+Content: "${content.slice(0, 3000)}"
+Source URL: ${url}
+
+Please provide:
+1. Key Facts: Extract 5-10 most important factual claims, statistics, or findings
+2. Summary: A concise 2-3 sentence summary of the main points
+3. Credibility Assessment: Rate the credibility based on evidence, citations, and objectivity
+4. Main Topics: Identify 5-8 main topics or themes
+5. Sentiment: Overall sentiment (positive/neutral/negative)
+
+Format your response as JSON:
+{
+  "keyFacts": [
+    {
+      "claim": "specific factual claim",
+      "confidence": 0.8,
+      "category": "statistic|claim|quote|definition|relationship"
+    }
+  ],
+  "summary": "concise summary",
+  "credibilityAssessment": "assessment with reasoning",
+  "mainTopics": ["topic1", "topic2"],
+  "sentimentAnalysis": "positive|neutral|negative"
+}`;
+
+    const result = await model.generateContent(analysisPrompt);
+    const analysisText = result.response.text();
+    
+    try {
+      const cleanJson = analysisText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      const analysis = JSON.parse(cleanJson);
+      
+      return {
+        success: true,
+        data: analysis
+      };
+    } catch {
+      // Fallback analysis
+      return {
+        success: true,
+        data: {
+          keyFacts: [],
+          summary: content.slice(0, 200) + '...',
+          credibilityAssessment: 'Unable to assess credibility automatically',
+          mainTopics: ['general'],
+          sentimentAnalysis: 'neutral' as const
+        }
+      };
+    }
+
+  } catch (error) {
+    console.error('Content analysis error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Content analysis failed'
+    };
+  }
+}
+
+// Day 3: Batch content processing for multiple sources
+export async function processBatchContent(contents: Array<{ url: string; text: string; title?: string }>): Promise<{
+  success: boolean;
+  data?: {
+    processedSources: number;
+    aggregatedFacts: Array<{
+      fact: string;
+      sources: string[];
+      confidence: number;
+      category: string;
+    }>;
+    topicClusters: string[];
+    diversityScore: number;
+    overallSummary: string;
+  };
+  error?: string;
+}> {
+  try {
+    if (!contents.length) {
+      return {
+        success: false,
+        error: 'No content provided for batch processing'
+      };
+    }
+
+    const batchPrompt = `Analyze and synthesize information from multiple sources:
+
+Sources:
+${contents.map((content, index) => 
+  `Source ${index + 1} (${content.url}):
+Title: ${content.title || 'No title'}
+Content: ${content.text.slice(0, 1000)}...
+`).join('\n\n')}
+
+Please provide:
+1. Aggregated Facts: Consolidate and verify facts across sources
+2. Topic Clusters: Group related topics and themes
+3. Diversity Score: Rate information diversity (0-1, where 1 is most diverse)
+4. Overall Summary: Synthesize findings into a comprehensive summary
+
+Format as JSON:
+{
+  "aggregatedFacts": [
+    {
+      "fact": "consolidated factual claim",
+      "sources": ["url1", "url2"],
+      "confidence": 0.9,
+      "category": "type"
+    }
+  ],
+  "topicClusters": ["cluster1", "cluster2"],
+  "diversityScore": 0.8,
+  "overallSummary": "comprehensive synthesis"
+}`;
+
+    const result = await model.generateContent(batchPrompt);
+    const analysisText = result.response.text();
+    
+    try {
+      const cleanJson = analysisText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      const analysis = JSON.parse(cleanJson);
+      
+      return {
+        success: true,
+        data: {
+          processedSources: contents.length,
+          ...analysis
+        }
+      };
+    } catch {
+      // Fallback processing
+      return {
+        success: true,
+        data: {
+          processedSources: contents.length,
+          aggregatedFacts: [],
+          topicClusters: ['general'],
+          diversityScore: 0.5,
+          overallSummary: 'Multiple sources processed, detailed analysis unavailable'
+        }
+      };
+    }
+
+  } catch (error) {
+    console.error('Batch content processing error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Batch processing failed'
+    };
+  }
+}

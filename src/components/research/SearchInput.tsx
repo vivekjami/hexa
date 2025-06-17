@@ -7,14 +7,45 @@ interface SearchInputProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
   placeholder?: string;
+  mode?: 'standard' | 'discovery';
 }
 
 export default function SearchInput({ 
   onSearch, 
   isLoading = false, 
-  placeholder = "Ask any research question..." 
+  placeholder = "Ask any research question...",
+  mode = 'standard'
 }: SearchInputProps) {
   const [query, setQuery] = useState('');
+
+  const getPlaceholder = () => {
+    if (mode === 'discovery') {
+      return "Enter topic for multi-source discovery and analysis...";
+    }
+    return placeholder;
+  };
+
+  const getModeIcon = () => {
+    if (mode === 'discovery') {
+      return isLoading ? (
+        <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
+      ) : (
+        <Search className="h-5 w-5 text-purple-400" />
+      );
+    }
+    return isLoading ? (
+      <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+    ) : (
+      <Search className="h-5 w-5 text-gray-400" />
+    );
+  };
+
+  const getBorderColor = () => {
+    if (mode === 'discovery') {
+      return 'border-purple-300 focus:ring-purple-500';
+    }
+    return 'border-gray-300 focus:ring-blue-500';
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,27 +58,24 @@ export default function SearchInput({
     <form onSubmit={handleSubmit} className="w-full max-w-4xl mx-auto">
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          {isLoading ? (
-            <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
-          ) : (
-            <Search className="h-5 w-5 text-gray-400" />
-          )}
+          {getModeIcon()}
         </div>
         
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={placeholder}
+          placeholder={getPlaceholder()}
           disabled={isLoading}
-          className="
+          className={`
             block w-full pl-10 pr-3 py-4 
-            border border-gray-300 rounded-lg 
+            ${getBorderColor()}
             placeholder-gray-500 
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+            focus:outline-none focus:ring-2 focus:border-transparent
             disabled:bg-gray-50 disabled:cursor-not-allowed
             text-lg
-          "
+            rounded-lg
+          `}
         />
         
         <button
