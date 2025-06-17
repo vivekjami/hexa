@@ -8,6 +8,8 @@ interface SearchInputProps {
   isLoading?: boolean;
   placeholder?: string;
   mode?: 'standard' | 'discovery';
+  advancedOptions?: any;
+  currentSession?: any;
 }
 
 export default function SearchInput({ 

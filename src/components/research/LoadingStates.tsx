@@ -6,6 +6,7 @@ import { Loader2, Search, Brain, FileText } from 'lucide-react';
 interface LoadingStatesProps {
   stage: 'analyzing' | 'searching' | 'processing' | 'synthesizing';
   message?: string;
+  realTimeUpdates?: any[];
 }
 
 export default function LoadingStates({ stage, message }: LoadingStatesProps) {

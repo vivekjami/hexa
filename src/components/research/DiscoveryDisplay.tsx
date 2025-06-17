@@ -87,6 +87,8 @@ interface DiscoveryDisplayProps {
   onCitationGeneration?: () => void;
   onKnowledgeGraph?: () => void;
   onEnhancedReport?: () => void;
+  session?: any;
+  onSaveSession?: (session: any) => void;
 }
 
 export default function DiscoveryDisplay({ 

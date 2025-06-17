@@ -19,6 +19,9 @@ interface ResultsDisplayProps {
   originalQuery: string;
   generatedQueries?: string[];
   isLoading?: boolean;
+  session?: any;
+  onSaveSession?: (session: any) => void;
+  onGenerateResearch?: () => void;
 }
 
 export default function ResultsDisplay({ 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SearchInput from '@/components/research/SearchInput';
 import ResultsDisplay from '@/components/research/ResultsDisplay';
 import LoadingStates from '@/components/research/LoadingStates';
@@ -10,14 +10,87 @@ import FactVerificationDisplay from '@/components/research/FactVerificationDispl
 import CitationManager from '@/components/research/CitationManager';
 import KnowledgeVisualization from '@/components/research/KnowledgeVisualization';
 import EnhancedReportComponent from '@/components/research/EnhancedReportComponent';
+import AdvancedSearchOptions from '@/components/research/AdvancedSearchOptions';
+import SearchHistory from '@/components/research/SearchHistory';
+import ResearchTemplates from '@/components/research/ResearchTemplates';
+import RealTimeProgress from '@/components/research/RealTimeProgress';
 import { 
   Search, 
   FileText, 
   Network,
   CheckSquare,
   BookOpen,
-  FileCheck
+  FileCheck,
+  Settings,
+  History,
+  Layers,
+  Clock,
+  Filter
 } from 'lucide-react';
+
+// Day 6: New interfaces for advanced features
+interface AdvancedSearchOptions {
+  dateRange?: {
+    start?: string;
+    end?: string;
+  };
+  domains?: string[];
+  sourceTypes?: ('academic' | 'news' | 'government' | 'commercial' | 'blog' | 'social')[];
+  language?: string;
+  region?: string;
+  categories?: string[];
+  excludeTerms?: string[];
+  sortBy?: 'relevance' | 'date' | 'credibility';
+  maxResults?: number;
+}
+
+interface SearchHistoryItem {
+  id: string;
+  query: string;
+  timestamp: string;
+  mode: 'standard' | 'discovery';
+  options?: AdvancedSearchOptions;
+  resultCount?: number;
+  starred?: boolean;
+}
+
+interface ResearchTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  searchQueries: string[];
+  advancedOptions: AdvancedSearchOptions;
+  reportSections: string[];
+  tags: string[];
+}
+
+interface ResearchSession {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  query: string;
+  searchResponse?: SearchResponse;
+  discoveryResponse?: DiscoveryResponse;
+  researchResponse?: ResearchResponse;
+  verificationData?: VerificationResponse;
+  citationData?: CitationResponse;
+  knowledgeGraphData?: KnowledgeGraphResponse;
+  enhancedReportData?: EnhancedReportResponse;
+  notes?: string;
+  tags?: string[];
+  starred?: boolean;
+}
+
+interface RealTimeUpdate {
+  type: 'progress' | 'status' | 'result' | 'error';
+  stage: string;
+  message: string;
+  progress?: number;
+  data?: any;
+  timestamp: string;
+}
 
 // Day 3: Enhanced interfaces for discovery functionality
 interface SourceQuality {
@@ -367,7 +440,7 @@ interface EnhancedReportResponse {
   error?: string;
 }
 
-type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph' | 'enhanced_report';
+type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph' | 'enhanced_report' | 'history' | 'templates' | 'settings';
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
@@ -388,48 +461,256 @@ export default function HomePage() {
   const [enhancedReportData, setEnhancedReportData] = useState<EnhancedReportResponse | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  const handleSearch = async (query: string) => {
+  // Day 6: New state for advanced features
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
+  const [advancedSearchOptions, setAdvancedSearchOptions] = useState<AdvancedSearchOptions>({});
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
+  const [researchSessions, setResearchSessions] = useState<ResearchSession[]>([]);
+  const [realTimeUpdates, setRealTimeUpdates] = useState<RealTimeUpdate[]>([]);
+  const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
+  const [researchTemplates, setResearchTemplates] = useState<ResearchTemplate[]>([]);
+  const [showRealTimePanel, setShowRealTimePanel] = useState(false);
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    const connectWebSocket = () => {
+      const ws = new WebSocket(process.env.NODE_ENV === 'production' 
+        ? 'wss://your-domain.com/api/ws' 
+        : 'ws://localhost:3000/api/ws'
+      );
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setWsConnection(ws);
+      };
+      
+      ws.onmessage = (event) => {
+        const update: RealTimeUpdate = JSON.parse(event.data);
+        setRealTimeUpdates(prev => [...prev.slice(-49), update]); // Keep last 50 updates
+        
+        // Update loading stage based on real-time updates
+        if (update.type === 'progress') {
+          setLoadingStage(update.stage as any);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        setWsConnection(null);
+        // Reconnect after 3 seconds
+        setTimeout(connectWebSocket, 3000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    };
+
+    connectWebSocket();
+    
+    return () => {
+      setWsConnection(prev => {
+        if (prev) {
+          prev.close();
+        }
+        return null;
+      });
+    };
+  }, []);
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('hexa-search-history');
+    if (savedHistory) {
+      setSearchHistory(JSON.parse(savedHistory));
+    }
+    
+    const savedSessions = localStorage.getItem('hexa-research-sessions');
+    if (savedSessions) {
+      setResearchSessions(JSON.parse(savedSessions));
+    }
+    
+    const savedTemplates = localStorage.getItem('hexa-research-templates');
+    if (savedTemplates) {
+      setResearchTemplates(JSON.parse(savedTemplates));
+    } else {
+      // Load default templates
+      setResearchTemplates(getDefaultTemplates());
+    }
+  }, []);
+
+  // Save to localStorage when data changes
+  useEffect(() => {
+    localStorage.setItem('hexa-search-history', JSON.stringify(searchHistory));
+  }, [searchHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('hexa-research-sessions', JSON.stringify(researchSessions));
+  }, [researchSessions]);
+
+  useEffect(() => {
+    localStorage.setItem('hexa-research-templates', JSON.stringify(researchTemplates));
+  }, [researchTemplates]);
+
+  const getDefaultTemplates = (): ResearchTemplate[] => [
+    {
+      id: 'academic-research',
+      name: 'Academic Research',
+      description: 'Comprehensive academic research with peer-reviewed sources',
+      category: 'Academic',
+      searchQueries: [],
+      advancedOptions: {
+        sourceTypes: ['academic', 'government'],
+        sortBy: 'credibility',
+        maxResults: 20
+      },
+      reportSections: ['Abstract', 'Introduction', 'Literature Review', 'Methodology', 'Findings', 'Conclusion'],
+      tags: ['academic', 'research', 'peer-reviewed']
+    },
+    {
+      id: 'market-analysis',
+      name: 'Market Analysis',
+      description: 'Business and market research template',
+      category: 'Business',
+      searchQueries: [],
+      advancedOptions: {
+        sourceTypes: ['commercial', 'news', 'government'],
+        dateRange: { start: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+        sortBy: 'date',
+        maxResults: 25
+      },
+      reportSections: ['Executive Summary', 'Market Overview', 'Competitive Analysis', 'Trends', 'Recommendations'],
+      tags: ['business', 'market', 'analysis']
+    },
+    {
+      id: 'news-investigation',
+      name: 'News Investigation',
+      description: 'Journalistic research with fact-checking focus',
+      category: 'Journalism',
+      searchQueries: [],
+      advancedOptions: {
+        sourceTypes: ['news', 'government', 'academic'],
+        dateRange: { start: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+        sortBy: 'date',
+        maxResults: 30
+      },
+      reportSections: ['Summary', 'Background', 'Key Facts', 'Sources', 'Verification', 'Timeline'],
+      tags: ['journalism', 'investigation', 'fact-check']
+    }
+  ];
+
+  // Enhanced search function with advanced options
+  const handleAdvancedSearch = async (query: string, options: AdvancedSearchOptions = {}) => {
     setIsLoading(true);
     setSearchResponse(null);
     setResearchResponse(null);
     setDiscoveryResponse(null);
     setLoadingStage('analyzing');
+    setShowRealTimePanel(true);
+
+    // Add to search history
+    const historyItem: SearchHistoryItem = {
+      id: Date.now().toString(),
+      query,
+      timestamp: new Date().toISOString(),
+      mode: discoveryMode,
+      options,
+      starred: false
+    };
 
     try {
-      // Simulate progression through stages
-      setTimeout(() => setLoadingStage('searching'), 500);
-      setTimeout(() => setLoadingStage('processing'), 2000);
+      // Send WebSocket message to start real-time updates
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({
+          action: 'start_search',
+          query,
+          options,
+          mode: discoveryMode
+        }));
+      }
 
-      const response = await fetch('/api/search', {
+      const endpoint = discoveryMode === 'discovery' ? '/api/discovery' : '/api/search';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          query, 
+          query,
           mode: 'comprehensive',
           options: {
-            numResults: 15
+            numResults: options.maxResults || 15,
+            dateRange: options.dateRange,
+            domains: options.domains,
+            sourceTypes: options.sourceTypes,
+            language: options.language,
+            region: options.region,
+            excludeTerms: options.excludeTerms,
+            sortBy: options.sortBy
           }
         }),
       });
 
-      const data: SearchResponse = await response.json();
+      const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Search failed');
+      if (discoveryMode === 'discovery') {
+        setDiscoveryResponse(data);
+      } else {
+        setSearchResponse(data);
       }
 
-      setSearchResponse(data);
+      // Update history with result count
+      historyItem.resultCount = data.data?.results?.length || data.data?.parallelExecution?.totalSources || 0;
+      setSearchHistory(prev => [historyItem, ...prev.slice(0, 49)]); // Keep last 50 searches
+
+      // Create or update research session
+      createOrUpdateSession(query, data);
+
     } catch (error) {
       console.error('Search error:', error);
-      setSearchResponse({
+      const errorResponse = {
         success: false,
         error: error instanceof Error ? error.message : 'Search failed'
-      });
+      };
+      
+      if (discoveryMode === 'discovery') {
+        setDiscoveryResponse(errorResponse);
+      } else {
+        setSearchResponse(errorResponse);
+      }
     } finally {
       setIsLoading(false);
+      
+      // Send WebSocket message to end search
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({
+          action: 'end_search',
+          query
+        }));
+      }
     }
+  };
+
+  const createOrUpdateSession = (query: string, searchData: any) => {
+    const sessionId = Date.now().toString();
+    const session: ResearchSession = {
+      id: sessionId,
+      name: query.slice(0, 50) + (query.length > 50 ? '...' : ''),
+      createdAt: new Date().toISOString(),
+      lastModified: new Date().toISOString(),
+      query,
+      searchResponse: discoveryMode === 'standard' ? searchData : undefined,
+      discoveryResponse: discoveryMode === 'discovery' ? searchData : undefined,
+      tags: [],
+      starred: false
+    };
+
+    setResearchSessions(prev => [session, ...prev.slice(0, 19)]); // Keep last 20 sessions
+  };
+
+  // Updated handleSearch to use advanced search
+  const handleSearch = async (query: string) => {
+    return handleAdvancedSearch(query, advancedSearchOptions);
   };
 
   const handleGenerateResearch = async () => {
@@ -745,22 +1026,24 @@ export default function HomePage() {
           <div className="py-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-gray-900">
-                HEXA Research Copilot v5.0
+                HEXA Research Copilot v6.0
               </h1>
               <p className="mt-2 text-gray-600">
-                AI-powered research with synthesis, fact verification, citations, and professional report generation
+                Premium AI research with real-time updates, advanced search, and session management
               </p>
-              <div className="mt-2 flex justify-center gap-2 text-sm">
-                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full">Day 5 Complete</span>
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Content Synthesis</span>
-                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Report Generation</span>
-                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full">Multiple Export Formats</span>
-                <span className="bg-teal-100 text-teal-800 px-3 py-1 rounded-full">Citation Styles</span>
+              <div className="mt-2 flex justify-center gap-2 text-sm flex-wrap">
+                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full">Day 6 Complete</span>
+                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Real-Time Updates</span>
+                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Advanced Search</span>
+                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full">Session Management</span>
+                <span className="bg-teal-100 text-teal-800 px-3 py-1 rounded-full">Smart Templates</span>
+                <span className="bg-pink-100 text-pink-800 px-3 py-1 rounded-full">Premium UX</span>
               </div>
             </div>
             
-            {/* Discovery Mode Toggle */}
-            <div className="flex justify-center mt-4">
+            {/* Enhanced Controls */}
+            <div className="flex justify-center mt-4 space-x-4">
+              {/* Discovery Mode Toggle */}
               <div className="bg-gray-100 p-1 rounded-lg">
                 <button
                   onClick={() => setDiscoveryMode('standard')}
@@ -782,6 +1065,67 @@ export default function HomePage() {
                 >
                   Multi-Source Discovery
                 </button>
+              </div>
+
+              {/* Quick Action Buttons */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setAdvancedSearchOpen(!advancedSearchOpen)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    advancedSearchOpen
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <Filter className="h-4 w-4 mr-2 inline" />
+                  Advanced
+                </button>
+                <button
+                  onClick={() => setViewMode('history')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    viewMode === 'history'
+                      ? 'bg-green-50 text-green-700 border-green-200'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <History className="h-4 w-4 mr-2 inline" />
+                  History ({searchHistory.length})
+                </button>
+                <button
+                  onClick={() => setViewMode('templates')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    viewMode === 'templates'
+                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <Layers className="h-4 w-4 mr-2 inline" />
+                  Templates
+                </button>
+                <button
+                  onClick={() => setViewMode('settings')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    viewMode === 'settings'
+                      ? 'bg-gray-50 text-gray-700 border-gray-300'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <Settings className="h-4 w-4 mr-2 inline" />
+                  Settings
+                </button>
+                {realTimeUpdates.length > 0 && (
+                  <button
+                    onClick={() => setShowRealTimePanel(!showRealTimePanel)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      showRealTimePanel
+                        ? 'bg-orange-50 text-orange-700 border-orange-200'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Clock className="h-4 w-4 mr-2 inline" />
+                    Live Updates
+                  </button>
+                )}
               </div>
             </div>
             
@@ -892,6 +1236,28 @@ export default function HomePage() {
             mode={discoveryMode}
           />
 
+          {/* Day 6: Advanced Search Options Panel */}
+          {advancedSearchOpen && (
+            <div className="mb-6">
+              <AdvancedSearchOptions
+                options={advancedSearchOptions}
+                onChange={setAdvancedSearchOptions}
+                onClose={() => setAdvancedSearchOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* Day 6: Real-time Progress Panel */}
+          {showRealTimePanel && realTimeUpdates.length > 0 && (
+            <div className="mb-6">
+              <RealTimeProgress
+                updates={realTimeUpdates}
+                isConnected={!!wsConnection}
+                onClose={() => setShowRealTimePanel(false)}
+              />
+            </div>
+          )}
+
           {/* Loading States */}
           {isLoading && (
             <LoadingStates stage={loadingStage} />
@@ -900,6 +1266,173 @@ export default function HomePage() {
           {/* Content based on mode and view */}
           {!isLoading && (
             <>
+              {/* Day 6: History View */}
+              {viewMode === 'history' && (
+                <SearchHistory
+                  history={searchHistory}
+                  sessions={researchSessions}
+                  onLoadFromHistory={(item: SearchHistoryItem) => {
+                    if (item.mode === 'discovery') {
+                      setDiscoveryMode('discovery');
+                      handleDiscoverySearch(item.query);
+                    } else {
+                      setDiscoveryMode('standard');
+                      handleSearch(item.query);
+                    }
+                    setViewMode('search');
+                  }}
+                  onStarItem={(id: string) => {
+                    setSearchHistory(prev => prev.map(item => 
+                      item.id === id ? { ...item, starred: !item.starred } : item
+                    ));
+                  }}
+                  onDeleteItem={(id: string) => {
+                    setSearchHistory(prev => prev.filter(item => item.id !== id));
+                  }}
+                  onLoadSession={(session: ResearchSession) => {
+                    // Load session data
+                    setSearchResponse(session.searchResponse || null);
+                    setDiscoveryResponse(session.discoveryResponse || null);
+                    setResearchResponse(session.researchResponse || null);
+                    setVerificationData(session.verificationData || null);
+                    setViewMode('search');
+                  }}
+                  onSaveSession={(session: ResearchSession) => {
+                    setResearchSessions(prev => 
+                      prev.map(s => s.id === session.id ? session : s)
+                    );
+                  }}
+                />
+              )}
+
+              {/* Day 6: Templates View */}
+              {viewMode === 'templates' && (
+                <ResearchTemplates
+                  templates={researchTemplates}
+                  onApplyTemplate={(template: ResearchTemplate) => {
+                    setAdvancedSearchOptions(template.advancedOptions);
+                    // Apply template to current search if available
+                    if (searchResponse?.data?.originalQuery || discoveryResponse?.data?.originalQuery) {
+                      const query = searchResponse?.data?.originalQuery || discoveryResponse?.data?.originalQuery || '';
+                      if (discoveryMode === 'discovery') {
+                        handleDiscoverySearch(query);
+                      } else {
+                        handleSearch(query);
+                      }
+                    }
+                    setViewMode('search');
+                  }}
+                  onSaveTemplate={(template: ResearchTemplate) => {
+                    if (template.id) {
+                      // Update existing template
+                      setResearchTemplates(prev => prev.map(t => 
+                        t.id === template.id ? template : t
+                      ));
+                    } else {
+                      // Create new template
+                      const newTemplate = {
+                        ...template,
+                        id: Date.now().toString()
+                      };
+                      setResearchTemplates(prev => [newTemplate, ...prev]);
+                    }
+                  }}
+                  onDeleteTemplate={(id: string) => {
+                    setResearchTemplates(prev => prev.filter(t => t.id !== id));
+                  }}
+                />
+              )}
+
+              {/* Day 6: Settings View */}
+              {viewMode === 'settings' && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Settings</h2>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">WebSocket Connection</h3>
+                      <div className="flex items-center space-x-4">
+                        <div className={`flex items-center space-x-2 ${wsConnection ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className={`w-3 h-3 rounded-full ${wsConnection ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span className="text-sm font-medium">
+                            {wsConnection ? 'Connected' : 'Disconnected'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (wsConnection) {
+                              wsConnection.close();
+                            } else {
+                              // Reconnect logic would go here
+                              window.location.reload();
+                            }
+                          }}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                          {wsConnection ? 'Disconnect' : 'Reconnect'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Data Management</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Search History ({searchHistory.length} items)</span>
+                          <button
+                            onClick={() => {
+                              setSearchHistory([]);
+                              localStorage.removeItem('hexa-search-history');
+                            }}
+                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Research Sessions ({researchSessions.length} items)</span>
+                          <button
+                            onClick={() => {
+                              setResearchSessions([]);
+                              localStorage.removeItem('hexa-research-sessions');
+                            }}
+                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Custom Templates ({researchTemplates.filter(t => !['academic-research', 'market-analysis', 'news-investigation'].includes(t.id)).length} items)</span>
+                          <button
+                            onClick={() => {
+                              setResearchTemplates(getDefaultTemplates());
+                              localStorage.removeItem('hexa-research-templates');
+                            }}
+                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                          >
+                            Reset to Defaults
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Real-time Updates</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Update History ({realTimeUpdates.length} items)</span>
+                          <button
+                            onClick={() => setRealTimeUpdates([])}
+                            className="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                          >
+                            Clear History
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Discovery Mode Results */}
               {discoveryMode === 'discovery' && viewMode === 'search' && discoveryResponse && (
                 <>
@@ -1118,13 +1651,13 @@ export default function HomePage() {
             <div className="text-center py-12">
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Welcome to HEXA Research v5.0
+                  Welcome to HEXA Research v6.0
                 </h2>
                 <p className="text-gray-600 mb-8">
-                  Experience next-generation research with multi-source discovery, fact cross-verification, 
-                  citation management, knowledge visualization, and now professional report generation with 
-                  content synthesis. Our Day 5 implementation brings publication-ready research reports 
-                  with proper citations, multiple export formats, and advanced content analysis.
+                  Experience next-generation premium research with real-time progress tracking, advanced search filters, 
+                  session management, and smart templates. Our Day 6 implementation brings professional-grade research 
+                  capabilities with WebSocket-powered live updates, comprehensive search history, and intelligent templates 
+                  for different research domains.
                 </p>
                 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-left mb-8">
@@ -1165,7 +1698,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6 text-left mb-8">
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 text-left mb-8">
                   <div className="p-6 rounded-lg border border-purple-200 bg-purple-50">
                     <h3 className="font-semibold text-purple-900 mb-2">
                       🕸️ Knowledge Graph Visualization
@@ -1183,9 +1716,7 @@ export default function HomePage() {
                       Publication-ready reports with content synthesis, multiple export formats, and proper citations
                     </p>
                   </div>
-                </div>
 
-                <div className="grid md:grid-cols-2 gap-6 text-left">
                   <div className="p-6 rounded-lg border border-teal-200 bg-teal-50">
                     <h3 className="font-semibold text-teal-900 mb-2">
                       📝 Content Synthesis Engine
@@ -1194,24 +1725,66 @@ export default function HomePage() {
                       Intelligent combination of multiple sources with narrative generation and proper attribution
                     </p>
                   </div>
-                  
+                </div>
+
+                {/* Day 6 Features */}
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 text-left mb-8">
                   <div className="p-6 rounded-lg border border-indigo-200 bg-indigo-50">
                     <h3 className="font-semibold text-indigo-900 mb-2">
-                      📤 Multiple Export Formats
+                      🔍 Advanced Search Options
                     </h3>
                     <p className="text-sm text-indigo-700">
-                      Export reports as PDF, Markdown, HTML, or JSON with customizable templates and citation styles
+                      Date range filters, domain-specific searches, source type selection, and language/region targeting
+                    </p>
+                  </div>
+
+                  <div className="p-6 rounded-lg border border-pink-200 bg-pink-50">
+                    <h3 className="font-semibold text-pink-900 mb-2">
+                      📚 Search History & Sessions
+                    </h3>
+                    <p className="text-sm text-pink-700">
+                      Comprehensive search history with session management, starring, and easy reload functionality
+                    </p>
+                  </div>
+
+                  <div className="p-6 rounded-lg border border-cyan-200 bg-cyan-50">
+                    <h3 className="font-semibold text-cyan-900 mb-2">
+                      📋 Research Templates
+                    </h3>
+                    <p className="text-sm text-cyan-700">
+                      Pre-built templates for Academic, Business, and Journalism research with customizable options
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-8 bg-gradient-to-r from-orange-50 to-purple-50 p-6 rounded-lg border border-orange-200">
-                  <h3 className="font-semibold text-orange-900 mb-2">
-                    🚀 Day 5 Complete: Professional Report Generation
+                <div className="grid md:grid-cols-2 gap-6 text-left mb-8">
+                  <div className="p-6 rounded-lg border border-red-200 bg-red-50">
+                    <h3 className="font-semibold text-red-900 mb-2">
+                      🔄 Real-Time Progress Tracking
+                    </h3>
+                    <p className="text-sm text-red-700">
+                      WebSocket-powered live updates showing search progress, status changes, and real-time results
+                    </p>
+                  </div>
+
+                  <div className="p-6 rounded-lg border border-yellow-200 bg-yellow-50">
+                    <h3 className="font-semibold text-yellow-900 mb-2">
+                      ⚙️ Premium User Experience
+                    </h3>
+                    <p className="text-sm text-yellow-700">
+                      Persistent data storage, advanced settings, data management, and professional-grade UI/UX
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-900 mb-2">
+                    🚀 Day 6 Complete: Premium Research Platform
                   </h3>
-                  <p className="text-sm text-orange-700">
-                    Use Discovery mode and generate enhanced reports with content synthesis, timeline analysis, 
-                    statistical aggregation, controversy detection, and proper citation management in multiple styles.
+                  <p className="text-sm text-blue-700">
+                    Use advanced search options, manage your research sessions, apply intelligent templates, and track 
+                    real-time progress. Experience the complete premium research workflow with persistent data and 
+                    professional-grade features.
                   </p>
                 </div>
               </div>
