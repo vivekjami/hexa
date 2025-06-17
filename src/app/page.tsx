@@ -407,16 +407,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 
-                <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-2">Day 2 Features 🚀</h4>
-                  <ul className="text-sm text-blue-700 space-y-1">
-                    <li>✅ Advanced query decomposition with complexity analysis</li>
-                    <li>✅ Multi-strategy search (neural, keyword, temporal)</li>
-                    <li>✅ Content enrichment and similarity discovery</li>
-                    <li>✅ Information gap detection and query refinement</li>
-                    <li>✅ Powered by Google Gemini 2.0 Flash</li>
-                  </ul>
-                </div>
+                
               </div>
             </div>
           )}
