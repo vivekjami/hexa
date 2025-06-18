@@ -1,0 +1,46 @@
+{
+  "name": "hexa-research-copilot",
+  "version": 2,
+  "public": false,
+  "env": {
+    "EXA_API_KEY": "@exa-api-key",
+    "GEMINI_API_KEY": "@gemini-api-key",
+    "OPENAI_API_KEY": "@openai-api-key"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_APP_NAME": "HEXA Research Copilot",
+      "NEXT_PUBLIC_APP_VERSION": "6.0.0"
+    }
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/ws",
+      "destination": "/api/ws"
+    }
+  ]
+}
