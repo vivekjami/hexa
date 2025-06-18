@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Database, Zap, Shield, Info, RotateCcw, Trash2 } from 'lucide-react';
+import { Settings, Database, Zap, Shield, Info, RotateCcw, Trash2, HardDrive } from 'lucide-react';
 import { apiClient } from '@/lib/api/optimized-client';
+import { cleanupLocalStorage, getStorageStats } from '@/lib/storage';
 
 interface PerformanceSettings {
   enableCaching: boolean;
@@ -25,6 +26,7 @@ const SettingsView: React.FC = () => {
 
   const [cacheStats, setCacheStats] = useState<any>(null);
   const [rateLimitStats, setRateLimitStats] = useState<any>(null);
+  const [storageStats, setStorageStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -41,6 +43,7 @@ const SettingsView: React.FC = () => {
   const loadStats = () => {
     setCacheStats(apiClient.getCacheStats());
     setRateLimitStats(apiClient.getRateLimitStats());
+    setStorageStats(getStorageStats());
   };
 
   const handleSettingChange = (key: keyof PerformanceSettings, value: any) => {
@@ -53,6 +56,16 @@ const SettingsView: React.FC = () => {
     setIsLoading(true);
     try {
       apiClient.clearCache();
+      loadStats();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const clearLocalStorage = async () => {
+    setIsLoading(true);
+    try {
+      cleanupLocalStorage();
       loadStats();
     } finally {
       setIsLoading(false);
@@ -240,6 +253,68 @@ const SettingsView: React.FC = () => {
                 {Math.round(cacheStats.size * 0.1)}KB
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* LocalStorage Statistics */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <HardDrive className="h-5 w-5 text-purple-600" />
+            <h3 className="text-lg font-semibold text-gray-900">LocalStorage Statistics</h3>
+          </div>
+          <button
+            onClick={clearLocalStorage}
+            disabled={isLoading}
+            className="flex items-center space-x-1 px-3 py-1 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded transition-colors"
+            title="Clean up localStorage data"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Cleanup Storage</span>
+          </button>
+        </div>
+
+        {storageStats && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded p-3">
+                <div className="text-sm text-gray-600">Storage Used</div>
+                <div className="text-2xl font-bold text-gray-900">{storageStats.sizeKB}KB</div>
+              </div>
+              <div className="bg-gray-50 rounded p-3">
+                <div className="text-sm text-gray-600">Total Items</div>
+                <div className="text-2xl font-bold text-gray-900">{storageStats.items}</div>
+              </div>
+              <div className="bg-gray-50 rounded p-3">
+                <div className="text-sm text-gray-600">Usage</div>
+                <div className={`text-2xl font-bold ${storageStats.usage > 0.8 ? 'text-red-600' : storageStats.usage > 0.5 ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {Math.round(storageStats.usage * 100)}%
+                </div>
+              </div>
+            </div>
+            
+            {storageStats.keys.slice(0, 5).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Largest Storage Keys</h4>
+                <div className="space-y-2">
+                  {storageStats.keys.slice(0, 5).map((keyInfo: any) => (
+                    <div key={keyInfo.key} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <span className="text-sm text-gray-700 truncate">{keyInfo.key}</span>
+                      <span className="text-sm text-gray-500">{keyInfo.sizeKB}KB</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {storageStats.usage > 0.8 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="text-sm text-red-800">
+                  <strong>Warning:</strong> LocalStorage usage is high. Consider cleaning up old data to prevent storage quota errors.
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

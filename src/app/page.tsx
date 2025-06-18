@@ -443,6 +443,9 @@ interface EnhancedReportResponse {
 
 type ViewMode = 'search' | 'research' | 'verification' | 'citations' | 'knowledge_graph' | 'enhanced_report' | 'history' | 'templates' | 'settings';
 
+import { safeLocalStorageSet, safeLocalStorageGet } from '@/lib/storage';
+import '@/lib/storage/emergency'; // Import emergency storage handlers
+
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('search');
   const [isLoading, setIsLoading] = useState(false);
@@ -483,7 +486,7 @@ export default function HomePage() {
     const connectWebSocket = () => {
       try {
         const wsUrl = process.env.NODE_ENV === 'production' 
-          ? 'wss://your-domain.com/api/ws' 
+          ? 'wss://hexa-azure.vercel.app/api/ws' 
           : 'ws://localhost:3000/api/ws';
         
         const ws = new WebSocket(wsUrl);
@@ -530,45 +533,49 @@ export default function HomePage() {
     // Attempt to connect, but don't fail if WebSocket is not available
     connectWebSocket();
     
+  }, []); // WebSocket connection only needs to run once on mount
+
+  // Cleanup WebSocket connection on unmount
+  useEffect(() => {
     return () => {
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.close(1000, 'Component unmounting');
       }
     };
-  }, []); // WebSocket connection only needs to run once on mount
+  }, [wsConnection]);
 
   // Load data from localStorage on mount
   useEffect(() => {
-    const savedHistory = localStorage.getItem('hexa-search-history');
+    const savedHistory = safeLocalStorageGet('hexa-search-history', []);
     if (savedHistory) {
-      setSearchHistory(JSON.parse(savedHistory));
+      setSearchHistory(savedHistory);
     }
     
-    const savedSessions = localStorage.getItem('hexa-research-sessions');
+    const savedSessions = safeLocalStorageGet('hexa-research-sessions', []);
     if (savedSessions) {
-      setResearchSessions(JSON.parse(savedSessions));
+      setResearchSessions(savedSessions);
     }
     
-    const savedTemplates = localStorage.getItem('hexa-research-templates');
-    if (savedTemplates) {
-      setResearchTemplates(JSON.parse(savedTemplates));
+    const savedTemplates = safeLocalStorageGet('hexa-research-templates', []);
+    if (savedTemplates.length > 0) {
+      setResearchTemplates(savedTemplates);
     } else {
       // Load default templates
       setResearchTemplates(getDefaultTemplates());
     }
   }, []);
 
-  // Save to localStorage when data changes
+  // Save to localStorage when data changes with safe storage
   useEffect(() => {
-    localStorage.setItem('hexa-search-history', JSON.stringify(searchHistory));
+    safeLocalStorageSet('hexa-search-history', searchHistory, { maxItems: 50 });
   }, [searchHistory]);
 
   useEffect(() => {
-    localStorage.setItem('hexa-research-sessions', JSON.stringify(researchSessions));
+    safeLocalStorageSet('hexa-research-sessions', researchSessions, { maxItems: 20 });
   }, [researchSessions]);
 
   useEffect(() => {
-    localStorage.setItem('hexa-research-templates', JSON.stringify(researchTemplates));
+    safeLocalStorageSet('hexa-research-templates', researchTemplates, { maxItems: 15 });
   }, [researchTemplates]);
 
   const getDefaultTemplates = (): ResearchTemplate[] => [
