@@ -474,50 +474,68 @@ export default function HomePage() {
 
   // WebSocket connection for real-time updates
   useEffect(() => {
+    // Skip WebSocket in development or if not available
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'development') {
+      console.log('WebSocket disabled in development mode');
+      return;
+    }
+
     const connectWebSocket = () => {
-      const ws = new WebSocket(process.env.NODE_ENV === 'production' 
-        ? 'wss://your-domain.com/api/ws' 
-        : 'ws://localhost:3000/api/ws'
-      );
-      
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        setWsConnection(ws);
-      };
-      
-      ws.onmessage = (event) => {
-        const update: RealTimeUpdate = JSON.parse(event.data);
-        setRealTimeUpdates(prev => [...prev.slice(-49), update]); // Keep last 50 updates
+      try {
+        const wsUrl = process.env.NODE_ENV === 'production' 
+          ? 'wss://your-domain.com/api/ws' 
+          : 'ws://localhost:3000/api/ws';
         
-        // Update loading stage based on real-time updates
-        if (update.type === 'progress') {
-          setLoadingStage(update.stage as any);
-        }
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          setWsConnection(ws);
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const update: RealTimeUpdate = JSON.parse(event.data);
+            setRealTimeUpdates(prev => [...prev.slice(-49), update]); // Keep last 50 updates
+            
+            // Update loading stage based on real-time updates
+            if (update.type === 'progress') {
+              setLoadingStage(update.stage as any);
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+        
+        ws.onclose = (event) => {
+          console.log('WebSocket disconnected:', event.code, event.reason);
+          setWsConnection(null);
+          
+          // Only attempt to reconnect if it wasn't a normal closure
+          if (event.code !== 1000 && event.code !== 1001) {
+            setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+          }
+        };
+        
+        ws.onerror = () => {
+          console.warn('WebSocket connection failed - falling back to polling mode');
+          setWsConnection(null);
+        };
+      } catch {
+        console.warn('WebSocket not available - using fallback mode');
         setWsConnection(null);
-        // Reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000);
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
+      }
     };
 
+    // Attempt to connect, but don't fail if WebSocket is not available
     connectWebSocket();
     
     return () => {
-      setWsConnection(prev => {
-        if (prev) {
-          prev.close();
-        }
-        return null;
-      });
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.close(1000, 'Component unmounting');
+      }
     };
-  }, []);
+  }, []); // WebSocket connection only needs to run once on mount
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -608,6 +626,7 @@ export default function HomePage() {
     setDiscoveryResponse(null);
     setLoadingStage('analyzing');
     setShowRealTimePanel(true);
+    setRealTimeUpdates([]); // Clear previous updates
 
     // Add to search history
     const historyItem: SearchHistoryItem = {
@@ -620,7 +639,10 @@ export default function HomePage() {
     };
 
     try {
-      // Send WebSocket message to start real-time updates
+      // Simulate real-time updates for better UX
+      simulateRealTimeUpdates(query, 'analyzing');
+      
+      // Send WebSocket message to start real-time updates (if connected)
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({
           action: 'start_search',
@@ -629,6 +651,10 @@ export default function HomePage() {
           mode: discoveryMode
         }));
       }
+
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UX
+      setLoadingStage('searching');
+      simulateRealTimeUpdates(query, 'searching');
 
       const endpoint = discoveryMode === 'discovery' ? '/api/discovery' : '/api/search';
       const response = await fetch(endpoint, {
@@ -652,13 +678,30 @@ export default function HomePage() {
         }),
       });
 
+      setLoadingStage('processing');
+      simulateRealTimeUpdates(query, 'processing');
+
       const data = await response.json();
       
+      setLoadingStage('synthesizing');
+      simulateRealTimeUpdates(query, 'synthesizing');
+
+      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay for final stage
+
       if (discoveryMode === 'discovery') {
         setDiscoveryResponse(data);
       } else {
         setSearchResponse(data);
       }
+
+      // Add completion update
+      const completionUpdate: RealTimeUpdate = {
+        type: 'result',
+        stage: 'completed',
+        message: `Search completed successfully! Found ${data.data?.results?.length || data.data?.parallelExecution?.totalSources || 0} results.`,
+        timestamp: new Date().toISOString()
+      };
+      setRealTimeUpdates(prev => [...prev.slice(-49), completionUpdate]);
 
       // Update history with result count
       historyItem.resultCount = data.data?.results?.length || data.data?.parallelExecution?.totalSources || 0;
@@ -669,6 +712,16 @@ export default function HomePage() {
 
     } catch (error) {
       console.error('Search error:', error);
+      
+      // Add error update
+      const errorUpdate: RealTimeUpdate = {
+        type: 'error',
+        stage: 'error',
+        message: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date().toISOString()
+      };
+      setRealTimeUpdates(prev => [...prev.slice(-49), errorUpdate]);
+      
       const errorResponse = {
         success: false,
         error: error instanceof Error ? error.message : 'Search failed'
@@ -682,7 +735,7 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
       
-      // Send WebSocket message to end search
+      // Send WebSocket message to end search (if connected)
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({
           action: 'end_search',
@@ -1016,6 +1069,52 @@ export default function HomePage() {
       console.error('Enhanced report generation error:', error);
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  // Fallback real-time updates when WebSocket is not available
+  const simulateRealTimeUpdates = (query: string, stage: string) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+      // Create simulated updates for better UX when WebSocket is not available
+      const update: RealTimeUpdate = {
+        type: 'progress',
+        stage,
+        message: getStageMessage(stage, query),
+        progress: getStageProgressValue(stage),
+        timestamp: new Date().toISOString()
+      };
+      
+      setRealTimeUpdates(prev => [...prev.slice(-49), update]);
+    }
+  };
+
+  const getStageMessage = (stage: string, query: string): string => {
+    switch (stage) {
+      case 'analyzing':
+        return `Analyzing search query: "${query}"`;
+      case 'searching':
+        return 'Searching across multiple sources...';
+      case 'processing':
+        return 'Processing and filtering results...';
+      case 'synthesizing':
+        return 'Synthesizing information and generating report...';
+      default:
+        return `Processing: ${stage}`;
+    }
+  };
+
+  const getStageProgressValue = (stage: string): number => {
+    switch (stage) {
+      case 'analyzing':
+        return 25;
+      case 'searching':
+        return 50;
+      case 'processing':
+        return 75;
+      case 'synthesizing':
+        return 90;
+      default:
+        return 0;
     }
   };
 
